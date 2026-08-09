@@ -21,11 +21,11 @@
 </picture>
 
 A [Chatbot-Arena](https://lmarena.ai/)-style platform for **blind comparison of
-generative 3D models — of living organisms**. You get a biological task and a set
-of anonymised 3D outputs — four where the task can fill a quad, two otherwise —
-rotate and zoom each, and pick the best. A pick-best-of-four is recorded as three
-pairwise comparisons, so votes feed Bradley–Terry rankings with bootstrap
-confidence intervals either way.
+generative 3D models — of living organisms**. You get a biological task and two
+anonymised 3D outputs, rotate and zoom each, and pick the closer one. Votes feed
+Bradley–Terry rankings with bootstrap confidence intervals. A four-up ballot is
+available at `/arena?set=kwise`; a pick-best-of-four is recorded as three pairwise
+comparisons, so the statistics are pairwise either way.
 
 **Why organisms.** Most 3D-generation evaluation runs on furniture and game props,
 where "looks plausible" is close enough. A maize plant, a lion's mane mushroom and
