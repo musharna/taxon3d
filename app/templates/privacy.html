@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Privacy · Taxon3D{% endblock %}
-{% block description %}What Taxon3D records when you vote - a session identifier and the comparisons you judged - and what it deliberately does not collect about you.{% endblock %}
+{% block description %}What Taxon3D records when you vote - a session identifier and the comparisons you judged - what it deliberately does not collect, and which third parties your browser contacts when you load a page.{% endblock %}
 {% block content %}
 <section class="board prose">
   <h1>Privacy</h1>
@@ -11,6 +11,44 @@
     passwords are collected. We do not sell or share this data with third
     parties. Aggregate, de-identified vote data may be used for research and
     published leaderboard statistics.
+  </p>
+  <p>
+    The session id is kept in a cookie so that one voter is not shown the same
+    comparison twice. It identifies a browser, not a person, and is not linked
+    to anything else.
+  </p>
+
+  {# Added 2026-08-08. The paragraph above was true and incomplete: it said we share nothing
+     with third parties, while loading any page caused the visitor's browser to contact four
+     hosts we do not control. "We do not share your data" and "no third party sees you" are
+     different claims, and only the first was ever true. Hosts below were MEASURED from a real
+     browser session, not read off the templates. #}
+  <h2>Third parties your browser contacts</h2>
+  <p>
+    We send no data to these services ourselves, but loading a page makes your
+    browser request files from them, which necessarily reveals your IP address
+    and basic request headers to the host:
+  </p>
+  <ul>
+    <li>
+      <strong>Cloudflare</strong> — serves the site's network edge, stores and
+      delivers the 3D models and reference photographs, provides the
+      human-verification widget on the arena page, and reports aggregate
+      traffic statistics to us. We see visit counts, not individuals.
+    </li>
+    <li>
+      <strong>Google Fonts</strong> — the site's typefaces are requested from
+      <code>fonts.googleapis.com</code> and <code>fonts.gstatic.com</code>.
+    </li>
+    <li>
+      <strong>hCaptcha</strong> — not in use today. The arena supports it as an
+      alternative to Cloudflare's verification widget, and if it is ever
+      switched on, that widget loads from <code>js.hcaptcha.com</code>.
+    </li>
+  </ul>
+  <p>
+    We run no advertising, no cross-site trackers, and no third-party session
+    recording.
   </p>
 </section>
 {% endblock %}
