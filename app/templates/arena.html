@@ -146,11 +146,11 @@
     </div>
   </div>
 
-  <!-- 4-up K-wise ballot. Hidden in the markup because the 2-up above is the fallback shape,
-       NOT because it is the exceptional one: /api/next now serves a kind:"kwise" payload
-       whenever the task has an admitted same-paradigm quad, and arena.js swaps this grid in
-       (4 clickable model-col cards) in place of .pair. Tasks without a quad — and ?set=pair —
-       transparently render the 2-up above instead. -->
+  <!-- 4-up K-wise ballot, now the OPT-IN shape: /api/next serves a kind:"kwise" payload only
+       for ?set=kwise, and arena.js swaps this grid in (4 clickable model-col cards) in place
+       of .pair when it does. Everything else — including a task that could fill a quad —
+       renders the 2-up above. Kept whole rather than deleted so the shape stays available for
+       comparison; see `_build_ballot` for why the default went back to pairs. -->
   <div id="kwise-grid" class="kwise-grid" hidden></div>
 
   {% include "_captcha.html" %}
@@ -170,9 +170,9 @@
      is the absence of a judgement, and folding it into Tie would inject noise into exactly the
      pairs where the signal is weakest. So this records nothing and just advances. #}
   <div class="skip-bar">
-    {# "comparison", not "pair": same rule as the hero above — a ballot is four models or two,
-       so a count here is wrong half the time. Said "this pair" while four models were on
-       screen. #}
+    {# "comparison", not "pair": this button is shared with the opt-in 4-up ballot, where "this
+       pair" would be wrong on screen — which is exactly what it said while k-wise was the
+       default. The default being a pair again does not make it safe to hardcode. #}
     <button type="button" id="skip-btn" class="skip-btn">
       Can’t tell — skip this comparison <kbd>S</kbd>
     </button>

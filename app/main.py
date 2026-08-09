@@ -795,19 +795,32 @@ def _build_ballot(
     """The ONE definition of "what ballot comes next", shared by /api/next and the follow-up
     `next` embedded in the /api/vote and /api/kvote responses.
 
-    The default is K-WISE, which is not a preference for 4-up so much as a preference for the
-    largest ballot the task can support: `_build_kwise_comparison` degrades to a pairwise
-    comparison whenever no task has four admitted same-paradigm outputs from four distinct
-    generators. A pair yields one Bradley-Terry relation; a quad yields three. Human votes are
-    the scarce input on every board, so serving a pair where a quad exists discards two thirds
-    of what the voter just told us.
+    The default is PAIRWISE. This reverses the k-wise default, which was argued on information
+    yield: a pair yields one Bradley-Terry relation and a quad yields three, so serving a pair
+    where a quad existed looked like discarding two thirds of what a voter offered. Two
+    corrections and one observation overturned that:
 
-    `?set=pair` is the explicit opt-out, and the reason this routing is centralized: /api/vote
-    used to build its follow-up with the pairwise builder unconditionally. With a k-wise default
-    that hardcoding becomes a trap — one pairwise ballot (the degrade, or an explicit opt-out)
-    would pin the voter to pairs for the rest of the session, because every follow-up came from
-    the pairwise builder regardless of what was available. The same divergence between two
-    copies of one decision already caused a live bug here once (see `_vote_pool_predicate`).
+    * The 4-up ballot collects a single best-of pick, not a ranking, so a quad says nothing
+      about how the three losers rank against each other. The comparison at equal mesh cost is
+      one quad (4 meshes, 3 relations) against two pairs (4 meshes, 2 relations) — 1.5x per
+      mesh delivered, not 3x per ballot.
+    * A quad is roughly twice the ballot bytes of a pair, and since fidelity tier became a
+      property of the whole ballot, LOD eligibility multiplies across slots: ~33% per-output
+      coverage leaves 0.33^4 (~1.4%) of quads eligible against 0.33^2 (~11%) of pairs.
+    * A voter using the live arena reported the 4-up ballot as overwhelming. COMPLETED ballots,
+      not relations per ballot, are the scarce input — a shape that costs completions loses
+      even at a favourable relation ratio.
+
+    `?set=kwise` is the explicit opt-in and keeps the 4-up builder, endpoint, grid and reveal
+    reachable rather than dead code. `?set=pair` remains accepted (it lands on the default) so
+    links already in the wild keep working.
+
+    Centralizing this routing is what keeps EITHER default safe. /api/vote once built its
+    follow-up with the pairwise builder unconditionally, which pinned any voter who landed on a
+    pair to pairs for the rest of the session. That trap is not a property of which shape is
+    default — it is a property of a follow-up that ignores the mode. Flipping the default just
+    moves the exposed side of it to k-wise, so the mode threads through every caller and both
+    directions are pinned by tests.
     """
     if mode == BALLOT_MODE_CALIBRATION:
         # A calibration set is a fixed, fully-enumerated list of pairs; a gold check inserted
@@ -825,9 +838,12 @@ def _build_ballot(
         if gold is not None:
             return gold
 
-    if mode == BALLOT_MODE_PAIR:
-        return _build_comparison(db, session_id, criterion_slug, category_slug, kingdom=kingdom)
-    return _build_kwise_comparison(db, session_id, criterion_slug, category_slug, kingdom=kingdom)
+    if mode == BALLOT_MODE_KWISE:
+        return _build_kwise_comparison(
+            db, session_id, criterion_slug, category_slug, kingdom=kingdom
+        )
+    # BALLOT_MODE_PAIR lands here too, as does an unrecognized `?set=` value.
+    return _build_comparison(db, session_id, criterion_slug, category_slug, kingdom=kingdom)
 
 
 def _require_admin(token: str | None) -> None:

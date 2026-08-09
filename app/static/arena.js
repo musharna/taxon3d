@@ -61,10 +61,11 @@ const qs = () => {
   const p = new URLSearchParams();
   if (cat && cat !== "all") p.set("category", cat);
   if (crit) p.set("criterion", crit);
-  // With no ?set, /api/next serves the largest ballot the task supports — a 4-up K-wise grid
-  // where one exists, a 1v1 pair where it doesn't. render() dispatches on payload.kind, so
-  // both shapes arrive through the same path. Thread ?set=... from the page URL when present
-  // (?set=pair forces 1v1, ?set=calibration runs a scoped set).
+  // With no ?set, /api/next serves a 1v1 pair. render() dispatches on payload.kind, so the
+  // opt-in shapes arrive through the same path. Threading ?set=... from the page URL is what
+  // makes those opt-ins survive past the first ballot: the follow-up ballot is built from this
+  // same query string, so dropping it here would hand a ?set=kwise voter a pair after one vote
+  // (?set=kwise gives the 4-up grid, ?set=calibration runs a scoped set).
   const urlSet = new URLSearchParams(location.search).get("set");
   if (urlSet) p.set("set", urlSet);
   const s = p.toString();
