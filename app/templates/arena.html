@@ -10,56 +10,6 @@
      0% of the first model — the thing they are here to judge. See .arena-brief below for the
      invariant that keeps it that way. #}
 
-  {# Overlay, NOT a flow block: shown once by arena.js initOnboarding(). It used to be an inline
-     card costing 276px, so the help text explaining "drag to rotate" pushed the rotatable thing
-     off-screen. Same id/hidden contract as before — only its positioning changed. #}
-  <div class="onboard-card" id="onboard-banner" hidden>
-    <button
-      type="button"
-      class="onboard-dismiss"
-      id="onboard-dismiss"
-      aria-label="Dismiss"
-    >
-      ✕
-    </button>
-    <p class="onboard-eyebrow">First time here?</p>
-    <h2 class="onboard-title">How it works</h2>
-    <p class="onboard-lede">
-      You're comparing AI-generated 3D reconstructions of a real organism.
-      Judge which one is most faithful — every vote sharpens the leaderboards.
-    </p>
-    <ol class="onboard-steps">
-      <li>
-        <span class="onboard-step-n">1</span>
-        {# "scroll or pinch": this is the instruction for the primary interaction, and most
-           voters are on a phone, where there is no scroll-to-zoom. #}
-        <span><strong>Inspect</strong> — drag to rotate, scroll or pinch to zoom each model.</span>
-      </li>
-      <li>
-        <span class="onboard-step-n">2</span>
-        <span><strong>Compare</strong> — check each against the reference photos above.</span>
-      </li>
-      {# Step 3 and the key hints are the only genuinely shape-specific copy: a 4-up ballot
-         has no Tie / Both-bad and no A/B keys. arena.js rewrites both per rendered ballot
-         (see setBallotHelp); the markup below is the 2-up wording it falls back to. #}
-      <li>
-        <span class="onboard-step-n">3</span>
-        <span id="onboard-vote-step"
-          ><strong>Vote</strong> — pick the better one, or Tie / Both bad.</span
-        >
-      </li>
-    </ol>
-    <div class="onboard-foot">
-      <span class="onboard-keys" id="onboard-keys"
-        >Keys: <kbd>←</kbd> A · <kbd>→</kbd> B · <kbd>T</kbd> tie ·
-        <kbd>X</kbd> both-bad</span
-      >
-      <button type="button" class="onboard-start" id="onboard-start">
-        Start voting →
-      </button>
-    </div>
-  </div>
-
   {# ARENA BRIEF — everything a voter needs BEFORE the models, under one height budget.
      This wrapper is the invariant, not decoration. The fold bug this fixes was not caused by any
      single block: the hero (162px), onboarding (276px), task strip (115px) and reference panel
@@ -102,6 +52,52 @@
     <figcaption class="reference-cap">Reference — what the real organism looks like</figcaption>
     <div id="reference-gallery" class="reference-gallery"></div>
   </figure>
+
+  {# First-run guidance, IN FLOW and collapsed — one line until someone asks for it.
+
+     It has been three things. An inline card (276px, pushing the models it told you to rotate
+     below the fold), then a position:fixed card bottom-right, which traded that for a worse
+     bug: measured with elementFromPoint, it covered the pick button at 1440x900 and 1366x768,
+     and with a pairwise default it would sit on the vote bar instead. Both answered "where does
+     the panel go" when the question was how much room first-run guidance has earned.
+
+     A <details> costs ~28px closed, needs no JS to open, and is keyboard-accessible for free.
+     Being in flow is the invariant — an in-flow element cannot cover a control, at any viewport
+     — and tests/test_onboarding_in_flow.py pins it. arena.js opens it on a first visit only. #}
+  <details class="onboard" id="onboard-banner">
+    <summary class="onboard-summary">New here? How it works</summary>
+    <div class="onboard-body">
+      <p class="onboard-lede">
+        You're comparing AI-generated 3D reconstructions of a real organism.
+        Judge which one is most faithful — every vote sharpens the leaderboards.
+      </p>
+      <ol class="onboard-steps">
+        <li>
+          <span class="onboard-step-n">1</span>
+          {# "scroll or pinch": this is the instruction for the primary interaction, and most
+             voters are on a phone, where there is no scroll-to-zoom. #}
+          <span><strong>Inspect</strong> — drag to rotate, scroll or pinch to zoom each model.</span>
+        </li>
+        <li>
+          <span class="onboard-step-n">2</span>
+          <span><strong>Compare</strong> — check each against the reference photos above.</span>
+        </li>
+        {# Step 3 and the key hints are the only genuinely shape-specific copy: the opt-in 4-up
+           ballot has no Tie / Both-bad and no A/B keys. arena.js rewrites both per rendered
+           ballot (see setBallotHelp); the markup below is the 2-up default wording. #}
+        <li>
+          <span class="onboard-step-n">3</span>
+          <span id="onboard-vote-step"
+            ><strong>Vote</strong> — pick the better one, or Tie / Both bad.</span
+          >
+        </li>
+      </ol>
+      <span class="onboard-keys" id="onboard-keys"
+        >Keys: <kbd>←</kbd> A · <kbd>→</kbd> B · <kbd>T</kbd> tie ·
+        <kbd>X</kbd> both-bad</span
+      >
+    </div>
+  </details>
   </div>
 
   <div class="ab-toggle" role="tablist" aria-label="Which model to view">

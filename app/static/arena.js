@@ -12,29 +12,31 @@ const el = (id) => document.getElementById(id);
 const canFlag = () =>
   document.querySelector(".arena")?.dataset.canFlag === "true";
 
-// First-visit onboarding card: shown once, state persisted in localStorage. Fail-quiet.
+// First-visit onboarding: a <details> that ships CLOSED and is opened once, for a first-time
+// visitor. Fail-quiet — a blocked localStorage must leave a usable arena.
+//
+// The markup is the safe default rather than the common case: shipping it open would mean every
+// returning voter, and every crawler, gets the expanded panel if this script fails to run. Open
+// is the state that costs vertical space, so the failure mode should be closed.
 (function initOnboarding() {
-  const banner = document.getElementById("onboard-banner");
-  if (!banner) return;
+  const panel = document.getElementById("onboard-banner");
+  if (!panel) return;
   let seen = true;
   try {
     seen = !!localStorage.getItem("bio3d_onboarded");
   } catch (e) {
-    seen = true; // localStorage unavailable → don't show, never break the arena
+    seen = true; // localStorage unavailable → leave it collapsed, never break the arena
   }
-  if (!seen) banner.hidden = false;
-  const close = () => {
-    banner.hidden = true;
+  if (!seen) panel.open = true;
+  // `toggle` fires for open AND close, which is what we want: opening it is as much a sign the
+  // voter has met the arena as closing it. Recording on close alone would re-expand the panel
+  // on every visit for anyone who reads it and navigates away without collapsing it.
+  panel.addEventListener("toggle", () => {
     try {
       localStorage.setItem("bio3d_onboarded", "1");
     } catch (e) {
       /* ignore */
     }
-  };
-  // Either the ✕ or the "Start voting" CTA dismisses it.
-  ["onboard-dismiss", "onboard-start"].forEach((id) => {
-    const btn = document.getElementById(id);
-    if (btn) btn.addEventListener("click", close);
   });
 })();
 
