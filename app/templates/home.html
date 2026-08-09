@@ -15,13 +15,13 @@
         The <span class="b3d-hero-accent2">life-sciences</span> arena for<br />
         <span class="b3d-hero-accent3d">3D</span> generation
       </h1>
-      {# No fixed number, for the reason arena.html states: a ballot is four models where the
-         task can fill a quad and two where it cannot, so any count is wrong half the time.
-         This said "Two … judged side by side" until 2026-08-02 — written for the pairwise
-         ballot and never updated when k-wise became the default (PR #121), so the first
-         sentence a newcomer read promised a product the arena no longer served. #}
+      {# "Two" is safe to state again now that pairwise is the default ballot. This said "Two"
+         originally, lost the number on 2026-08-02 because k-wise (PR #121) made a ballot four
+         models or two depending on the task — so any fixed count was wrong half the time — and
+         gets it back now that every default ballot is a pair. A concrete number beats a hedge
+         in the first sentence a newcomer reads. #}
       <p class="b3d-hero-lede">
-        AI reconstructions of a real organism, judged side by side. Every
+        Two AI reconstructions of a real organism, judged side by side. Every
         vote powers Bradley&ndash;Terry leaderboards across the kingdoms of
         life.
       </p>
@@ -128,10 +128,9 @@
 
 <div class="b3d-section-head">
   <h2>How voting works</h2>
-  {# "blind", not "pairwise" — same rule as the footer tagline in base.html: this note
-     describes the INTERACTION, and the interaction is a four-model ballot as often as a
-     two-model one. methodology.html keeps its pairwise language, which is about the
-     statistics and is correct. #}
+  {# "blind" describes what makes the vote trustworthy — names hidden — which is the property
+     worth advertising here and is true of every ballot shape. It is not a hedge about ballot
+     size: the default ballot is a pair again, and the cards below say so plainly. #}
   <span class="b3d-section-head-note"
     >anonymous &middot; blind &middot; Bradley&ndash;Terry</span
   >
@@ -145,28 +144,25 @@
       ground-truth biology.
     </p>
   </div>
-  {# Cards 2 and 3 said "Two … / Vote for A, B, a tie, or both-bad" until 2026-08-04. That
-     was the pairwise ballot, and the hero three sections up was corrected for k-wise
-     (PR #121, PR #138) while these were missed — the fix was scoped to the fold. Keep
-     these shape-agnostic for the reason arena.html states: a ballot is four models where
-     the task can fill a quad and two where it cannot, so any fixed count is wrong half
-     the time. Tie and both-bad exist only on the two-model shape. #}
+  {# These cards have now been rewritten twice for a ballot-shape change: they described the
+     pairwise ballot, went shape-agnostic when k-wise became the default, and are concrete
+     again now that pairwise is. The lesson worth keeping is that ballot-shape copy lives in
+     at least four places — here, the hero, arena.html and base.html's footer — and the
+     k-wise change only ever fixed the ones above the fold. Change the shape, grep all four. #}
   <div class="b3d-step-card">
     <div class="b3d-step-num">2</div>
     <h3>The candidate reconstructions</h3>
     <p>
-      Several models build 3D from that same input — four where the organism can
-      fill a quad, two where it cannot. You inspect each in an interactive viewer:
-      orbit, zoom, pan.
+      Two models build 3D from that same input. You inspect each in an
+      interactive viewer: orbit, zoom, pan.
     </p>
   </div>
   <div class="b3d-step-card">
     <div class="b3d-step-num">3</div>
     <h3>You pick the closest to life</h3>
     <p>
-      One click on the best reconstruction. Where a ballot holds only a pair, tie
-      and both-bad are offered as well. Names stay hidden until you choose — no
-      brand bias.
+      One click on the better reconstruction — or call it a tie, or flag both as
+      bad. Names stay hidden until you choose — no brand bias.
     </p>
   </div>
 </div>
