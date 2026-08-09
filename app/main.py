@@ -35,6 +35,8 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
+from sqlalchemy import text as sa_text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from . import (
@@ -56,7 +58,7 @@ from . import (
     submissions,
     variants,
 )
-from .database import get_db, init_db
+from .database import SessionLocal, get_db, init_db
 from .models import (
     CalibrationPair,
     Category,
@@ -80,7 +82,58 @@ from .storage import content_type_for, get_storage
 logger = logging.getLogger(__name__)
 
 config.ensure_dirs()
-init_db()
+
+
+def _init_db_safely(initializer=init_db) -> bool:
+    """Run schema init, and survive it failing.
+
+    This used to be a bare `init_db()` at module level. When the database became unreachable it
+    raised during IMPORT, so uvicorn never started, the process exited 1, and the machine
+    reboot-looped — the platform then served 503 for everything, including static assets and
+    pages needing no database. A dependency outage became a total process failure.
+
+    Deliberately not a silent swallow: the traceback is logged at ERROR, and `/healthz` reports
+    the database separately so the state is visible rather than inferred. What changes is only
+    whether it is FATAL. Schema creation is a convenience for dev and first boot; it is not a
+    reason for a running site to refuse to serve its own privacy page.
+    """
+    try:
+        initializer()
+    except Exception:  # noqa: BLE001 — any driver error here must not stop the app booting
+        logger.exception("init_db failed; starting anyway with the database marked unavailable")
+        return False
+    return True
+
+
+DB_SCHEMA_READY = _init_db_safely()
+
+#: Served for a 503. Inline styles and no template render on purpose: this page exists for the
+#: moments when the usual machinery is the thing that is broken, so it must not depend on a
+#: template loader, a static asset, or a font that has to be fetched. Colours are the site's,
+#: hardcoded, and it reads in either theme.
+_OUTAGE_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Temporarily unavailable · Taxon3D</title>
+<style>
+  :root { color-scheme: dark light; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:#12161c; color:#eef1f5;
+         font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; padding:1.5rem; }
+  main { max-width:34rem; }
+  h1 { font-size:1.4rem; margin:0 0 .75rem; }
+  p { margin:0 0 .75rem; color:#aeb7c2; line-height:1.55; }
+  a { color:#4ec98b; }
+</style></head>
+<body><main>
+  <h1>Taxon3D is temporarily unavailable</h1>
+  <p>The database is not reachable right now, so comparisons and leaderboards cannot be
+     served. Nothing has been lost &mdash; votes already recorded are safe.</p>
+  <p>Please try again shortly. If this persists, it is worth reporting on
+     <a href="https://github.com/musharna/taxon3d/issues">GitHub</a>.</p>
+</main></body></html>
+"""
 
 APP_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
@@ -171,9 +224,57 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+#: Read-only public pages: no forms, no per-visitor content, nothing a shared cache must not
+#: hold. Everything absent from here — /arena, /submit, /admin, /auth, /api — keeps today's
+#: behaviour exactly.
+_CACHEABLE_PATHS = frozenset(
+    {
+        "/",
+        "/leaderboard",
+        "/models",
+        "/organisms",
+        "/dataset",
+        "/methodology",
+        "/terms",
+        "/privacy",
+        "/licenses",
+        "/coverage",
+        "/robots.txt",
+        "/llms.txt",
+        "/sitemap.xml",
+    }
+)
+_CACHEABLE_PREFIXES = ("/organisms/", "/models/", "/leaderboard/")
+
+#: Five minutes at the edge, then serve stale for ten more while revalidating in the background.
+#: `max-age=0` keeps the BROWSER revalidating, so a voter watching a board still sees fresh
+#: numbers; it is the shared cache we want absorbing crawlers.
+_PUBLIC_CACHE = "public, max-age=0, s-maxage=300, stale-while-revalidate=600"
+
+
+def _is_cacheable_page(path: str) -> bool:
+    return path in _CACHEABLE_PATHS or path.startswith(_CACHEABLE_PREFIXES)
+
+
 @app.middleware("http")
 async def ensure_session(request: Request, call_next):
-    """Attach an anonymous session id (cookie) used for light dedup + history."""
+    """Attach an anonymous session id (cookie) used for light dedup + history.
+
+    Public read-only pages are exempted from the cookie and marked cacheable. Those two go
+    together and cannot be separated: no HTML response used to carry a `Cache-Control` header,
+    Cloudflare does not cache HTML without one, so every view reached Postgres — a 447-request
+    crawl became 447 database renders, exhausted the monthly transfer quota, and suspended the
+    database. But simply adding `public` here would have been a vulnerability, because this
+    middleware issues a session cookie to any request arriving without one, and a crawler never
+    sends cookies. The responses a crawler triggers are exactly the ones carrying `Set-Cookie`,
+    and a shared cache holding one would serve a single visitor's session id to everyone after
+    them. A page is cacheable only because it is cookie-free.
+
+    `Vary: Cookie` covers the second personalization channel: `bio3d_kingdom` changes what a
+    board shows, so a visitor who has chosen a kingdom must not be served another visitor's
+    view. Crawlers and first-time visitors send no cookies, share one cache entry, and are the
+    traffic this is for.
+    """
     sid = request.cookies.get(SESSION_COOKIE)
     is_new = sid is None
     if is_new:
@@ -213,7 +314,16 @@ async def ensure_session(request: Request, call_next):
         except Exception:  # noqa: BLE001 — never let stats computation break a page
             request.state.kingdom_stats = None
     response = await call_next(request)
-    if is_new:
+    # A `?kingdom=` request writes a preference cookie, so it is personalized by definition and
+    # stays uncached. Those are the query permutations a crawler multiplies anyway (447 URLs
+    # from 86 real ones), and they carry a canonical tag pointing at the bare page.
+    cacheable = (
+        request.method in ("GET", "HEAD")
+        and _kq is None
+        and response.status_code == 200
+        and _is_cacheable_page(request.url.path)
+    )
+    if is_new and not cacheable:
         response.set_cookie(
             SESSION_COOKIE,
             sid,
@@ -229,6 +339,10 @@ async def ensure_session(request: Request, call_next):
             max_age=60 * 60 * 24 * 365,
             samesite="lax",
         )
+    if cacheable:
+        response.headers["Cache-Control"] = _PUBLIC_CACHE
+        vary = response.headers.get("Vary")
+        response.headers["Vary"] = f"{vary}, Cookie" if vary else "Cookie"
     return response
 
 
@@ -3664,4 +3778,56 @@ def admin_restore_output(output_id: int, token: str = Form(...), db: Session = D
 
 @app.get("/healthz")
 def healthz():
+    """LIVENESS only — is this process serving? Touches nothing external, by design.
+
+    fly.toml points its health check here with a 5s timeout and a 30s interval. Anything slow in
+    this handler becomes a failed check, and a failed check gets the machine killed and
+    restarted. A database probe therefore does NOT belong here: a merely SLOW database would
+    take down a process that is serving correctly, which is the same "dependency outage becomes
+    total outage" failure that motivated this work in the first place. Database state lives on
+    /readyz.
+    """
     return {"status": "ok", "version": app.version}
+
+
+@app.get("/readyz")
+def readyz():
+    """READINESS — can this process actually do its job? Probes the database.
+
+    Separate from /healthz so that monitoring can alert on a real outage without the platform
+    treating the same signal as "kill this machine". Still returns 200 with `database: down`
+    rather than a failure status, for the same reason.
+    """
+    db_state = "ok"
+    try:
+        with SessionLocal() as _db:
+            _db.execute(sa_text("SELECT 1"))
+    except Exception:  # noqa: BLE001 — reporting the outage IS this endpoint's job
+        logger.warning("readyz: database unreachable", exc_info=True)
+        db_state = "down"
+    return {
+        "status": "ok",
+        "version": app.version,
+        "database": db_state,
+        "schema_initialized": DB_SCHEMA_READY,
+    }
+
+
+@app.exception_handler(OperationalError)
+async def _database_unavailable(request: Request, exc: OperationalError):
+    """Answer a database outage with 503 and a readable page, not a 500 and a traceback.
+
+    The distinction is not cosmetic: 503 means "try later" and 500 means "broken". Crawlers
+    treat them differently, and a site being indexed cannot afford 500s. Visitors cannot act on
+    a stack trace either, and it should not be shown to them.
+    """
+    logger.error("database unavailable serving %s", request.url.path, exc_info=exc)
+    wants_json = request.url.path.startswith("/api") or "application/json" in request.headers.get(
+        "accept", ""
+    )
+    if wants_json:
+        return JSONResponse(
+            {"error": "database-unavailable", "detail": "Temporarily unavailable."},
+            status_code=503,
+        )
+    return HTMLResponse(_OUTAGE_PAGE, status_code=503)
