@@ -343,6 +343,22 @@ kbd,
 * {
   box-sizing: border-box;
 }
+/* Replaced elements are capped to their container. Without this, an <img> renders at its
+   INTRINSIC width, so any image added without a bespoke rule overflows the page — measured on
+   /organisms/rosa, whose 1280px reference photograph made the page scroll sideways by 164px at
+   1440x900 and 960px at 390x844. Sixteen organism pages carry that photograph, and they are
+   exactly the pages an inbound link lands on.
+   Fixing it per-page would leave the mechanism in place for the next unstyled image, so the
+   constraint belongs here. Deliberately sized images are unaffected: every one of them is
+   class- or id-scoped, which outranks a bare element selector. tests/test_responsive_images.py
+   pins this. */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
 body {
   margin: 0;
   font-family: "IBM Plex Sans", system-ui, sans-serif;
