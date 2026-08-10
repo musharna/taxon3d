@@ -146,7 +146,9 @@ stack, so this stays true.
 Use the environment values from `deploy/.env.public.example`, with real secrets
 filled from the host's secret store (never commit real values):
 
-- `BIO3D_DATABASE_URL` — managed Postgres (see free-tier targets below)
+- `BIO3D_DATABASE_URL` — `sqlite:////data/arena.db`, a file on the mounted volume (see
+  "Where the database lives" below). Managed Postgres also works and is what this ran on
+  until 2026-08-09; the reason it no longer does is a failure mode, not a preference
 - `BIO3D_STORAGE_BACKEND=s3` + `BIO3D_S3_BUCKET` + `BIO3D_S3_PUBLIC_BASE_URL` —
   object storage for assets
 - `BIO3D_ADMIN_TOKEN` — a freshly rotated long random secret, never the dev
@@ -227,15 +229,67 @@ and both AI-judge boards — is **promoted in the bundle**, fitted on the intern
 the database is local. If a board looks stale, the fix is to re-run the recompute internally and
 export a new bundle, not to compute anything in production.
 
+## Where the database lives
+
+**A SQLite file on a Fly volume, mounted at `/data`** (`[[mounts]]` in `fly.toml`, volume
+`bio3d_data`, 1 GB, region `ord`). `BIO3D_DATABASE_URL=sqlite:////data/arena.db`.
+
+It ran on managed Postgres (Neon) from the first public deploy until 2026-08-09. What moved it
+was not cost: **a managed database bills egress per byte, so anything that reads a lot of pages
+can spend the month's quota and get the database suspended.** On 2026-08-08 a 447-page internal
+link sweep did exactly that, and the site went dark. Caching public HTML (added the same day)
+reduces how often that can happen; it does not remove the mechanism, and the crawlers this
+project actively wants — search engines — are the ones that would trip it. A local file has no
+egress meter, so the failure class is gone rather than made less likely.
+
+Note this is a plain file, so the compression that matters is on the meshes in R2, not here: the
+database is ~1 MB.
+
+### What that costs you, and the one habit it requires
+
+The database now lives on ONE volume in ONE region. Durability is that volume plus Fly's
+scheduled snapshots (daily, 5-day retention by default — `fly volumes snapshots list`). There is
+no managed failover and no point-in-time restore.
+
+So **votes cast in production are the only copy until they are harvested into
+`data/study/arena-study.db`.** The harvest before each release stops being hygiene and becomes
+the backup. Harvest first, then export — a bundle built from an unharvested study DB silently
+publishes a leaderboard fitted on fewer votes than exist.
+
+### Rebuilding the production database from a bundle
+
+The importer writes to whatever `BIO3D_DATABASE_URL` points at, so build the file locally and
+upload it rather than importing across the network:
+
+```bash
+export BIO3D_DATABASE_URL="sqlite:///$PWD/build.db"   # NOT study, NOT preview
+python -m scripts.import_public --bundle public_bundle/vN   # rows in; blobs already in R2 are skipped
+python -c "import sqlite3; c=sqlite3.connect('build.db'); c.execute('PRAGMA wal_checkpoint(TRUNCATE)'); c.execute('VACUUM INTO ?', ('arena.db',))"
+fly ssh sftp put arena.db /data/arena.db --app bio3d-arena
+fly secrets set BIO3D_DATABASE_URL="sqlite:////data/arena.db" --app bio3d-arena   # restarts onto it
+```
+
+`VACUUM INTO` is what makes the uploaded file a single consistent snapshot — copying a live WAL
+database with `cp` drops whatever is still in the `-wal`, which is how 80 rescued votes were
+lost on 2026-07-26. Verify the upload with `sha256sum` on both ends before flipping the secret,
+and flip it **last**: while the secret still points elsewhere, nothing holds `/data/arena.db`
+open, so the upload cannot race a running reader.
+
 ## Free-tier hosting targets
 
 - **App**: Fly.io or Render (either works; pick whichever the deployer already has
   an account on — nothing in the app is Fly- or Render-specific)
-- **Postgres**: Neon or Supabase
+- **Database**: a volume on the app host (what this uses). Managed Postgres — Neon, Supabase —
+  works too, but read "Where the database lives" first: metered egress is a liveness risk for a
+  site that wants crawler traffic
 - **Assets (S3-compatible)**: Cloudflare R2
 
-The live deployment uses Fly (`fly.toml`, committed) + Neon + R2. Two settings there are easy to
-get wrong and are worth repeating for any other host:
+The live deployment uses Fly (`fly.toml`, committed) + a Fly volume + R2. **Cloudflare fronts
+the assets only — the apex domain resolves straight to Fly, so nothing caches the HTML today.**
+The `Cache-Control: s-maxage` headers the app sets are therefore correct but currently
+unenforced; they start working the moment a CDN is put in front, and they are not what protects
+the database (the volume is). Two settings are easy to get wrong and are worth repeating for any
+other host:
 
 - **Trust the proxy's forwarded-for header** (`BIO3D_TRUST_FORWARDED_FOR=true` on Fly). Any
   platform that terminates TLS at an edge makes every request appear to come from the proxy.
