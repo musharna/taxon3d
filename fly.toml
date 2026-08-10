@@ -7,7 +7,9 @@
 # surface — see deploy/README.md.
 
 app = "bio3d-arena"
-primary_region = "ord"          # Chicago: the Neon database is in aws us-east-2 (Ohio)
+# The database is a file on the volume below, and a Fly volume cannot leave its region, so
+# the machine cannot either. This is no longer a latency preference — it is a hard constraint.
+primary_region = "ord"
 
 [build]
   dockerfile = "Dockerfile"
@@ -54,6 +56,24 @@ primary_region = "ord"          # Chicago: the Neon database is in aws us-east-2
   grace_period = "20s"
   method = "GET"
   path = "/healthz"
+
+# The database. The Dockerfile has always set BIO3D_DATA_DIR=/data and declared VOLUME
+# ["/data"] — but with no mount here, /data was the container's ephemeral layer, so the app
+# ran on managed Postgres instead and every page view crossed a metered network.
+#
+# It now runs on a SQLite file on this volume. That is the app's original backend and is still
+# fully supported in app/database.py (WAL, busy timeout, per-connection foreign_keys=ON). The
+# reason for the move is not cost alone: a managed database bills egress per byte, so a crawler
+# can exhaust the quota and suspend the database — which is exactly what took the site down on
+# 2026-08-08. A local file has no egress meter, so that failure cannot recur.
+#
+# What this trades away: the database now lives on ONE volume in ONE region, so it is only as
+# durable as that volume plus Fly's scheduled snapshots (daily, 5-day retention). Votes cast
+# here are the only copy until they are harvested into data/study/arena-study.db, so harvest
+# before every release — see deploy/README.md.
+[[mounts]]
+  source = "bio3d_data"
+  destination = "/data"
 
 [[vm]]
   size = "shared-cpu-1x"
