@@ -3155,6 +3155,10 @@ details.group[open] > summary.group-title::before {
   align-items: center;
   justify-content: center;
   gap: 0.85rem;
+  /* A grid item defaults to min-width:auto, which means it refuses to shrink below the
+     intrinsic width of its contents. Without this, the fixed-size ring wrap inside sets a
+     floor on the whole hero track and the page scrolls sideways on a phone. */
+  min-width: 0;
 }
 .b3d-hero-viz-frame {
   position: relative;
@@ -3208,9 +3212,16 @@ details.group[open] > summary.group-title::before {
 }
 .b3d-hero-viz-ring-wrap {
   position: relative;
-  width: 360px;
-  height: 360px;
-  max-width: 100%;
+  /* The rings are a SQUARE that is at most 360px, not a square that is exactly 360px.
+     `width: 360px` made 360 the element's intrinsic contribution, so the hero grid track
+     could not shrink below it, and `max-width: 100%` never rescued it because that
+     percentage resolves against a parent this element was itself sizing. At 390px the hero
+     content began 34px in (30px main padding + 4px hero padding), so 34 + 360 = 394 and the
+     homepage scrolled 4px sideways. Expressing the cap as max-width and letting aspect-ratio
+     hold the square removes the fixed width instead of counteracting it. */
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 1;
 }
 .b3d-hero-viz-ring-outer {
   position: absolute;
