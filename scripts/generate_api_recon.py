@@ -68,7 +68,12 @@ CROPS = {
     },
     "hericium": {
         "task_title": "Hericium erinaceus — single-image → 3D reconstruction",
-        "image": "data/assets/reference/hericium_ref.jpg",
+        # _clean, not hericium_ref.jpg: that file is a THREE-PANEL COLLAGE (a trunk plus two
+        # close-ups at different scales in one frame), so every reconstructor was being asked to
+        # model three photographs as one object. flag_recon_reliability measured this taxon at
+        # 0.50 recon completeness against 1.00 for text_native, which shares the subject but not
+        # the photo. Kept as hericium_ref_collage_old.jpg.
+        "image": "data/assets/reference/hericium_ref_clean.jpg",
         "subject": "lion's mane mushroom",
     },
     # Fungi expansion wave-2 (real-specimen CC photos: bolete/amanita CC-BY-3.0, morel/turkey-tail CC0)
