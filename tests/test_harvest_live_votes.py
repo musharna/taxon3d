@@ -5,9 +5,12 @@ live-only range — which means the refusal branch protecting internal rows from
 executed exactly never. A safety guard nobody has watched fail is not a safety guard, and this
 one stands between a future harvest and silently rewriting real votes.
 
-`plan()` is not exercised here: it queries the public Postgres with `= any(:ids)`, which SQLite
-cannot parse, and standing up a Postgres in CI to test a query shape would buy less than it
-costs. `apply()` is where the damage would happen, so that is what is pinned.
+`plan()` used to be skipped here, on the reasoning that it queried the public Postgres with
+`= any(:ids)` and standing up a Postgres in CI would buy less than it costs. That reasoning
+expired: the public instance moved to a SQLite file on a Fly volume, so SQLite is now the only
+database plan() will ever be pointed at, and `any()` is not a SQLite function. The skip was
+documenting the gap instead of covering it, and the release harvest died on it. plan() is
+exercised below against a SQLite public database, which is exactly what production is.
 """
 
 from __future__ import annotations
@@ -63,6 +66,49 @@ def _plan(votes, comparisons, *, vote_collisions=(), comparison_collisions=()):
             "vote": ["id", "comparison_id", "winner", "session_id"],
         },
     }
+
+
+@pytest.fixture
+def public_sqlite(tmp_path):
+    """A public database shaped like production: a SQLite file, with one live-only vote."""
+    p = tmp_path / "public.db"
+    con = sqlite3.connect(p)
+    con.executescript(_SCHEMA)
+    con.execute("insert into comparison (id, task_id, session_id) values (1, 7, 'old')")
+    con.execute("insert into comparison (id, task_id, session_id) values (9, 7, 'live')")
+    con.execute(
+        "insert into vote (id, comparison_id, winner, session_id) values (1, 1, 'a', 'old')"
+    )
+    con.execute(
+        "insert into vote (id, comparison_id, winner, session_id) values (2, 9, 'b', 'live')"
+    )
+    con.commit()
+    con.close()
+    return p
+
+
+def test_plan_reads_a_sqlite_public_database(study, public_sqlite):
+    """Production is SQLite on a Fly volume, so plan() must run there.
+
+    The vote must carry its comparison with it: votes are FK-bound to comparison, so a plan
+    that found the vote but not its parent would fail on insert.
+    """
+    p = harvest.plan(study, f"sqlite:///{public_sqlite}")
+
+    assert [v["id"] for v in p["votes"]] == [2], "the live-only vote was not found"
+    assert [c["id"] for c in p["comparisons"]] == [9], "the vote's comparison did not come with it"
+    assert p["study_max_vote_id"] == 1
+    assert p["vote_collisions"] == [] and p["comparison_collisions"] == []
+
+
+def test_plan_is_empty_when_the_public_database_has_nothing_new(study):
+    """Positive control for the test above: same code path, nothing to move.
+
+    Without this, a plan() that silently returned nothing would still pass the test above's
+    sibling assertions on a bad day.
+    """
+    p = harvest.plan(study, f"sqlite:///{study}")
+    assert p["votes"] == [] and p["comparisons"] == []
 
 
 def test_harvest_inserts_comparisons_and_votes(study):
