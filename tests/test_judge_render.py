@@ -66,6 +66,100 @@ def test_render_contact_sheets_writes_file_and_is_idempotent(tmp_path, monkeypat
         assert calls["n"] == 1
 
 
+def test_render_contact_sheets_rerenders_when_mesh_is_rewritten(tmp_path, monkeypatch):
+    """A sheet cached before its mesh was rewritten does not depict that mesh any more.
+
+    This is the confound behind the 2026-08-10 completeness correction: the ground-plane
+    strip and the default-cube fix rewrote GLBs in place, the cached sheets kept showing
+    the pre-fix meshes, and 18 of 43 verdicts described objects that no longer existed.
+    """
+    import os
+
+    import app.config as config
+
+    monkeypatch.setattr(config, "ASSET_DIR", tmp_path)
+    calls = {"n": 0}
+
+    def fake_capture(glb_abs, azimuths, elev):
+        calls["n"] += 1
+        return [_png("red", 64) for _ in azimuths]
+
+    with SessionLocal() as db:
+        cat = Category(slug="jrs-cat", name="C")
+        db.add(cat)
+        db.flush()
+        task = Task(category_id=cat.id, title="jrs-task", prompt="p")
+        gen = Generator(slug="jrs-gen", name="G")
+        db.add_all([task, gen])
+        db.flush()
+        (tmp_path / "seed").mkdir(parents=True, exist_ok=True)
+        glb = tmp_path / "seed" / "rewritten.glb"
+        glb.write_bytes(b"glTF-stub-BEFORE")
+        out = ModelOutput(task_id=task.id, generator_id=gen.id, asset_path="seed/rewritten.glb")
+        db.add(out)
+        db.commit()
+
+        judge_render.render_contact_sheets(db, [out.id], "multi4", capture_multi=fake_capture)
+        sheet = tmp_path / judge_render.contact_sheet_path(out.id, "multi4")
+        assert calls["n"] == 1 and sheet.exists()
+
+        # Rewrite the mesh, as strip_ground_plane.py / strip_default_cube.py do. Stamp the
+        # mtime forward explicitly: the write alone may land inside the sheet's timestamp
+        # granularity, which would make the test pass for the wrong reason.
+        glb.write_bytes(b"glTF-stub-AFTER-the-ground-plane-was-stripped")
+        future = sheet.stat().st_mtime + 10
+        os.utime(glb, (future, future))
+
+        res = judge_render.render_contact_sheets(db, [out.id], "multi4", capture_multi=fake_capture)
+        assert res == {"rendered": 1, "errors": 0, "failures": []}
+        assert calls["n"] == 2, "stale sheet was served for a mesh that had been rewritten"
+        # And the refreshed sheet is itself reusable — the fix must not re-render forever.
+        res3 = judge_render.render_contact_sheets(
+            db, [out.id], "multi4", capture_multi=fake_capture
+        )
+        assert res3["rendered"] == 0
+        assert calls["n"] == 2
+
+
+def test_render_contact_sheets_rerenders_when_source_mesh_is_missing(tmp_path, monkeypatch):
+    """No source to compare against means the sheet's freshness cannot be established.
+
+    Re-rendering surfaces the missing mesh through the normal capture failure path rather
+    than silently blessing a cached image nothing can vouch for.
+    """
+    import app.config as config
+
+    monkeypatch.setattr(config, "ASSET_DIR", tmp_path)
+    calls = {"n": 0}
+
+    def fake_capture(glb_abs, azimuths, elev):
+        calls["n"] += 1
+        return [_png("blue", 64) for _ in azimuths]
+
+    with SessionLocal() as db:
+        cat = Category(slug="jrm-cat", name="C")
+        db.add(cat)
+        db.flush()
+        task = Task(category_id=cat.id, title="jrm-task", prompt="p")
+        gen = Generator(slug="jrm-gen", name="G")
+        db.add_all([task, gen])
+        db.flush()
+        (tmp_path / "seed").mkdir(parents=True, exist_ok=True)
+        glb = tmp_path / "seed" / "vanishes.glb"
+        glb.write_bytes(b"glTF-stub")
+        out = ModelOutput(task_id=task.id, generator_id=gen.id, asset_path="seed/vanishes.glb")
+        db.add(out)
+        db.commit()
+
+        judge_render.render_contact_sheets(db, [out.id], "multi4", capture_multi=fake_capture)
+        assert calls["n"] == 1
+        glb.unlink()
+
+        res = judge_render.render_contact_sheets(db, [out.id], "multi4", capture_multi=fake_capture)
+        assert res["rendered"] == 1, "a sheet whose source is gone was reused unchecked"
+        assert calls["n"] == 2
+
+
 def test_render_contact_sheets_surfaces_capture_failure(tmp_path, monkeypatch):
     """A capture exception is logged + recorded in failures, not silently swallowed."""
     import app.config as config
