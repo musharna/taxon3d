@@ -34,6 +34,38 @@ class ReferenceProvenanceError(RuntimeError):
     pass
 
 
+# Life-stage vocabulary, split into the two claims that contradict each other. A task prompt is
+# free to say nothing about life stage; what it may not do is assert one the photo it describes
+# does not record. See `unsupported_life_stage_claim`.
+_LIFE_STAGES = {
+    "juvenile": ("sapling", "seedling", "juvenile", "young"),
+    "mature": ("mature", "adult", "full-grown", "fully grown", "old-growth"),
+}
+
+
+def unsupported_life_stage_claim(prompt: str, subject: str) -> str | None:
+    """Return the life-stage word a prompt asserts and its own photo fails to corroborate.
+
+    A recon prompt and its reference sidecar are two independent records of a single fact —
+    what the subject is — and swapping the photo updates only one of them. On 2026-06-27 the
+    Pinus photo went from a 4-5 year old sapling to a mature tree and the prompt kept saying
+    "Scots pine sapling", which `arena.js` renders straight into the ballot; voters were told
+    sapling while judging meshes of a mature tree for six weeks.
+
+    The check is deliberately one-directional. A prompt that claims a life stage must have it
+    corroborated by the subject line of the photo being reconstructed; a sidecar that records a
+    stage the prompt omits misleads nobody. Returns the offending word, or None when the prompt
+    makes no life-stage claim at all — the ordinary case for the other recon subjects, whose
+    prompts describe morphology ("whole plant", "rosette") rather than age.
+    """
+    p, s = prompt.lower(), subject.lower()
+    for terms in _LIFE_STAGES.values():
+        claimed = next((t for t in terms if t in p), None)
+        if claimed and not any(t in s for t in terms):
+            return claimed
+    return None
+
+
 def _ref_dir():
     return config.ASSET_DIR / "reference"
 
