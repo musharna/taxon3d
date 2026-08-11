@@ -46,7 +46,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import create_engine, text  # noqa: E402
+from sqlalchemy import bindparam, create_engine, text  # noqa: E402
 
 from app.config import normalize_database_url  # noqa: E402
 
@@ -97,12 +97,14 @@ def plan(study_path: Path, public_url: str) -> dict:
         comp_ids = sorted({r["comparison_id"] for r in vote_rows})
         comp_rows = []
         if comp_ids:
-            comp_rows = [
-                dict(r._mapping)
-                for r in c.execute(
-                    text("select * from comparison where id = any(:ids)"), {"ids": comp_ids}
-                )
-            ]
+            # `IN` with an expanding bindparam, not Postgres's `= any(:ids)`. The public
+            # instance is a SQLite file on a Fly volume now, and SQLite has no any(); the
+            # Postgres spelling made this the one line that could not run against production.
+            # Expanding renders the placeholders per dialect, so both backends work.
+            comp_stmt = text("select * from comparison where id in :ids").bindparams(
+                bindparam("ids", expanding=True)
+            )
+            comp_rows = [dict(r._mapping) for r in c.execute(comp_stmt, {"ids": comp_ids})]
 
     new_comps = [r for r in comp_rows if r["id"] not in have_comps]
     return {
