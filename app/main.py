@@ -1436,8 +1436,32 @@ def _media_headers(etag: str) -> dict[str, str]:
     return {"Cache-Control": f"public, max-age={MEDIA_MAX_AGE}", "ETag": etag}
 
 
+def _withheld(o: ModelOutput, token: str | None) -> bool:
+    """Is this output hidden from someone holding no admin token?
+
+    Hiding an output used to stop it being VOTED on and nothing else — the media routes resolved
+    the row, found a blob, and served it. Measured on taxon3d.org 2026-08-11: all 14 hidden
+    outputs returned 200, twelve of them hidden as the LICENSING control because their input
+    photos have no provenance sidecar. Withholding that is not enforced at the byte-serving
+    route is not withholding.
+
+    Admins keep access because moderation has to be able to look at what it just hid, and
+    /admin/moderation renders these same assets; the bypass reuses the existing `?token=`
+    convention rather than inventing a second one.
+    """
+    if o.hidden_at is None:
+        return False
+    return not token or token != config.ADMIN_TOKEN
+
+
 @app.get("/media/o/{output_id}.lod.{ext}")
-def media_asset_lod(output_id: int, ext: str, request: Request, db: Session = Depends(get_db)):
+def media_asset_lod(
+    output_id: int,
+    ext: str,
+    request: Request,
+    token: str | None = None,
+    db: Session = Depends(get_db),
+):
     """The low-detail companion mesh, when the release pipeline produced one.
 
     DECLARED BEFORE `media_asset`: Starlette matches routes in registration order and `{ext}` is
@@ -1451,7 +1475,9 @@ def media_asset_lod(output_id: int, ext: str, request: Request, db: Session = De
     database disagree — which is worth surfacing, not smoothing over.
     """
     o = db.get(ModelOutput, output_id)
-    if o is None:
+    # A withheld output answers exactly like one that never existed: these URLs are deliberately
+    # opaque and output-scoped, so 403 would confirm the id is real.
+    if o is None or _withheld(o, token):
         raise HTTPException(404, "Unknown output")
     rel = mesh_lod.lod_path(o.asset_path)
     if not storage.exists(rel):
@@ -1474,13 +1500,19 @@ def media_asset_lod(output_id: int, ext: str, request: Request, db: Session = De
 
 
 @app.get("/media/o/{output_id}.{ext}")
-def media_asset(output_id: int, ext: str, request: Request, db: Session = Depends(get_db)):
+def media_asset(
+    output_id: int,
+    ext: str,
+    request: Request,
+    token: str | None = None,
+    db: Session = Depends(get_db),
+):
     """Resolve an opaque, output-scoped asset URL (emitted by _arena_asset_url) back to the real
     file, so the anonymized arena never exposes the descriptive asset_path. Serves by output id;
     `ext` is cosmetic (helps 3D viewers). Streams through the app on remote (S3) storage so the
     object key — which can encode identity — is never revealed to the client either."""
     o = db.get(ModelOutput, output_id)
-    if o is None:
+    if o is None or _withheld(o, token):
         raise HTTPException(404, "Unknown output")
     ctype = content_type_for(o.asset_path)
     if getattr(storage, "remote", False):
