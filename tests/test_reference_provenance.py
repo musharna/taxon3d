@@ -250,3 +250,91 @@ def test_gold_twin_bio3darena_recon_gated(monkeypatch):
             db, {gold_gt.id}
         )  # no raise — twin has no input_image
         db.rollback()
+
+
+def test_a_prompt_may_not_claim_a_life_stage_its_own_photo_does_not_record():
+    """The prompt and the sidecar are two records of one fact; nothing used to bind them.
+
+    On 2026-06-27 the Pinus reference photo was swapped from a 4-5 year old sapling (lost in
+    meadow grass — a figure/ground failure) to a mature tree against blue sky. The photo moved;
+    the prompt did not, and kept telling voters "Scots pine sapling" for six weeks while every
+    mesh in the ballot depicted a mature tree. `arena.js` renders `task.prompt` straight into
+    the ballot, so this was voter-facing, not merely internal metadata.
+
+    The rule is one-directional on purpose: a life stage ASSERTED by the prompt must be
+    corroborated by the photo's own subject line. A sidecar that records a life stage the
+    prompt omits misleads nobody, so it is not an error.
+    """
+    from app.reference_provenance import unsupported_life_stage_claim
+
+    # The production defect, both strings verbatim as they stood on 2026-08-11.
+    assert (
+        unsupported_life_stage_claim(
+            "Reconstruct a 3D model of a Scots pine sapling from a single RGB image.",
+            "Pinus sylvestris (Scots pine, whole tree, blue-sky background)",
+        )
+        == "sapling"
+    )
+
+    # Positive control. The SAME prompt was correct against the photo it was written for, so
+    # a rule that fired here would be firing on the prompt rather than on the disagreement.
+    assert (
+        unsupported_life_stage_claim(
+            "Reconstruct a 3D model of a Scots pine sapling from a single RGB image.",
+            "Pinus sylvestris (whole young tree)",
+        )
+        is None
+    )
+
+    # A prompt claiming no life stage constrains nothing — the other three recon subjects.
+    for descr in ("thale cress whole-plant rosette", "tomato whole plant", "maize whole plant"):
+        assert unsupported_life_stage_claim(f"Reconstruct a {descr}.", "Some subject") is None
+
+    # Symmetric in the other direction: "mature" is just as unsupported against a bare subject.
+    assert (
+        unsupported_life_stage_claim("... a mature Scots pine ...", "Pinus sylvestris (a tree)")
+        == "mature"
+    )
+    assert (
+        unsupported_life_stage_claim(
+            "... a mature Scots pine ...", "Pinus sylvestris (mature whole tree)"
+        )
+        is None
+    )
+
+
+def test_every_seeded_recon_prompt_agrees_with_the_photo_it_reconstructs():
+    """The rule above, applied to what actually ships — not to fixtures.
+
+    Skips when `data/` is absent (it is gitignored), so this does NOT gate CI; the unit test
+    above is the CI-resident half. Keeping both is deliberate: the unit test proves the rule
+    discriminates, and this one proves the corpus currently satisfies it.
+    """
+    from app.seed import RECON_SPECIES
+    from app.reference_provenance import unsupported_life_stage_claim
+
+    ref_dir = os.path.join(REPO_ROOT, "data", "assets", "reference")
+    if not os.path.isdir(ref_dir):
+        pytest.skip("runtime reference assets absent (gitignored)")
+
+    # slug -> sidecar stem, following the established `{taxon}_ref.json` convention.
+    stems = {
+        "arabidopsis_thaliana": "arabidopsis_ref",
+        "solanum_lycopersicum": "tomato_ref",
+        "zea_mays": "maize_ref",
+        "pinus_sylvestris": "pinus_ref",
+    }
+    checked = 0
+    for slug, _sci, descr in RECON_SPECIES:
+        path = os.path.join(ref_dir, f"{stems[slug]}.json")
+        if not os.path.exists(path):
+            continue
+        with open(path) as fh:
+            subject = json.load(fh).get("subject", "")
+        prompt = f"Reconstruct a 3D model of a {descr} from a single RGB image."
+        offender = unsupported_life_stage_claim(prompt, subject)
+        assert offender is None, (
+            f"{slug}: prompt claims {offender!r} but its photo records {subject!r}"
+        )
+        checked += 1
+    assert checked, "no sidecars were read — the assertion above never ran"

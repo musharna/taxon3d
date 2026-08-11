@@ -101,11 +101,15 @@ def _publish(rel: Path) -> None:
 
 # The launch recon bake-off: (gt-bundle species slug, display name, prompt). The slug is
 # the held-out GT key the scoring service resolves (gt_bundle_prod) — keep these EXACT.
+# The description must not claim a life stage its reference photo does not record: these
+# strings and the photo's sidecar are two accounts of one subject, and swapping the photo
+# updates only one of them. `unsupported_life_stage_claim` binds the two; pinus said
+# "sapling" for six weeks after its photo became a mature tree, and voters were told so.
 RECON_SPECIES = [
     ("arabidopsis_thaliana", "Arabidopsis thaliana", "thale cress whole-plant rosette"),
     ("solanum_lycopersicum", "Solanum lycopersicum", "tomato whole plant"),
     ("zea_mays", "Zea mays", "maize whole plant"),
-    ("pinus_sylvestris", "Pinus sylvestris", "Scots pine sapling"),
+    ("pinus_sylvestris", "Pinus sylvestris", "whole Scots pine tree"),
 ]
 # The method roster (D5): single-image→3D reconstructors. Expansion toward the Plant
 # Methods 2025 six — InstantMesh is the first comprehensive-baselines add beyond the v1 pair.
