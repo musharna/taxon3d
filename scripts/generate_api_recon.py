@@ -141,6 +141,28 @@ def apply_subject_prompts(providers: dict, subject: str | None) -> dict:
     return out
 
 
+def select_providers(providers: dict, only: str | None) -> dict:
+    """Restrict `providers` to the comma-separated slugs named in `only`; a falsy `only` passes
+    everything through unchanged.
+
+    Raises ValueError naming the offending slug when `only` names something absent. Plain filter
+    semantics would be quietly expensive here: a typo would select nothing, the run would report
+    zero generated, and that is indistinguishable from a finished no-op. The flag exists so one
+    model can be re-run without re-paying for the other twelve, so a wrong name must stop the
+    run rather than skip it.
+    """
+    if not only:
+        return providers
+    wanted = {s.strip() for s in only.split(",") if s.strip()}
+    unknown = wanted - providers.keys()
+    if unknown:
+        raise ValueError(
+            f"--only names providers that do not exist: {sorted(unknown)}; "
+            f"available: {sorted(providers)}"
+        )
+    return {s: v for s, v in providers.items() if s in wanted}
+
+
 def _provenance(slug: str, name: str) -> tuple[str, str]:
     """(license, external_url) for an api: provider, derived from the slug prefix."""
     if slug.startswith("fal:"):
@@ -285,6 +307,12 @@ def main() -> int:
         help="regenerate providers even if this task already has their output (default: skip "
         "existing — our result cache, since FAL/Replicate don't dedup identical inputs)",
     )
+    ap.add_argument(
+        "--only",
+        help="comma-separated provider slugs to run, e.g. 'fal:hyper3d,tripo' (default: every "
+        "provider whose API key is in env). Pair with --force to re-run one model on a task "
+        "that already holds output from the others, without re-paying for those others.",
+    )
     args = ap.parse_args()
     crop = CROPS[args.crop]
 
@@ -295,7 +323,18 @@ def main() -> int:
     image_bytes = ref.read_bytes()
     # storage-relative path of the reference (asset store root is data/assets/) for per-output provenance
     input_image_rel = crop["image"].split("data/assets/", 1)[-1]
-    active = {s: v for s, v in PROVIDERS.items() if os.environ.get(v[1])}
+    try:
+        selected = select_providers(PROVIDERS, args.only)
+    except ValueError as exc:
+        print(exc)
+        return 1
+    active = {s: v for s, v in selected.items() if os.environ.get(v[1])}
+    # An explicitly named provider that we then silently drop for a missing key would spend
+    # nothing and still print a success report, so say so and stop.
+    keyless = sorted(selected.keys() - active.keys()) if args.only else []
+    if keyless:
+        print(f"--only named providers whose API key is not in env: {keyless}")
+        return 1
     # SAM-3D (and any other prompt-requiring model) needs the crop's plain-language subject to
     # segment; inject it so the batch loop's fn(image, api_key=...) call carries the prompt.
     active = apply_subject_prompts(active, crop.get("subject"))
