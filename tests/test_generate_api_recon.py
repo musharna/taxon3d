@@ -172,3 +172,67 @@ def test_provenance_by_slug_prefix():
     assert _provenance("fal:trellis", "TRELLIS (fal)")[1] == "https://fal.ai"
     assert _provenance("replicate:trellis", "TRELLIS (Replicate)")[1] == "https://replicate.com"
     assert _provenance("tripo", "Tripo")[1] == "https://platform.tripo3d.ai"
+
+
+def test_only_runs_the_providers_you_name_and_calls_no_others():
+    """`--only` exists so a re-run of one model does not re-pay for the other twelve. So the
+    assertion is on CALL COUNTS, not on report totals: an unnamed provider's function must never
+    be invoked. The first half is the positive control — with no selection every provider is
+    called, which proves the harness can observe a call at all (without it, a broken helper that
+    returns {} would pass the second half trivially)."""
+    from scripts.generate_api_recon import select_providers
+
+    db = SessionLocal()
+    try:
+        _tomato_task(db)
+        glb = _box_glb()
+        calls = []
+
+        def make(slug):
+            def fn(image_bytes, *, api_key):
+                calls.append(slug)
+                return glb
+
+            return fn
+
+        providers = {f"only{i}": (make(f"only{i}"), "K", f"Only{i}") for i in range(3)}
+
+        # positive control: no selection → every provider is called
+        generate_api_recon(db, b"img", providers=select_providers(providers, None), env={"K": "k"})
+        assert sorted(calls) == ["only0", "only1", "only2"]
+
+        calls.clear()
+        chosen = select_providers(providers, "only1")
+        assert set(chosen) == {"only1"}
+        generate_api_recon(db, b"img", providers=chosen, env={"K": "k"})
+        assert calls == ["only1"]  # only0 / only2 never re-called → never re-paid
+    finally:
+        db.close()
+
+
+def test_only_fails_loud_on_a_slug_that_does_not_exist():
+    """A typo'd slug must not silently select nothing. Left to filter semantics, `--only
+    fal:hyper3dd` would generate zero outputs and report success, which reads exactly like a
+    completed run."""
+    import pytest
+
+    from scripts.generate_api_recon import select_providers
+
+    providers = {
+        "fal:hyper3d": (lambda *a, **k: b"", "FAL_KEY", "Rodin/Hyper3D (fal)"),
+        "tripo": (lambda *a, **k: b"", "TRIPO_API_KEY", "Tripo"),
+    }
+    # positive control: the real name is accepted, so a raise below is about the typo
+    assert set(select_providers(providers, "fal:hyper3d")) == {"fal:hyper3d"}
+
+    with pytest.raises(ValueError) as e:
+        select_providers(providers, "fal:hyper3dd")
+    assert "fal:hyper3dd" in str(e.value)  # names the offending slug
+    assert "fal:hyper3d" in str(e.value)  # and shows what was actually available
+
+
+def test_only_accepts_several_slugs_and_ignores_whitespace():
+    from scripts.generate_api_recon import select_providers
+
+    providers = {s: (None, "K", s) for s in ("a", "b", "c")}
+    assert set(select_providers(providers, "a, c")) == {"a", "c"}
