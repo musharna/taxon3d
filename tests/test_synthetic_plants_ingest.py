@@ -46,6 +46,7 @@ from app import config, ingest, seed
 from app.database import SessionLocal, init_db
 from app.main import app
 from app.models import Category, Comparison, ModelOutput, Task
+from tests.factories import mark_evaluated
 
 # The recon bake-off GLBs double as "generated plants" for the cross-paradigm matchup. They
 # live in the sibling AgriGen tree, absent in CI / on other checkouts — skip there.
@@ -83,6 +84,10 @@ def _ingest_pair(db, task, entrants, paradigm):
             meta={"synthetic": True},
             paradigm=paradigm,
         )
+    # register_output records the REAL structural verdict, but semantic is a separate VLM pass
+    # that ingest does not (and should not) make. Without it the gate correctly holds these back,
+    # so stand in for that pass — this test is about the ingest→vote chain, not about the judge.
+    mark_evaluated(db, *db.query(ModelOutput).filter(ModelOutput.task_id == task.id).all())
     db.commit()
     assert db.query(ModelOutput).filter(ModelOutput.task_id == task.id).count() == len(entrants)
 

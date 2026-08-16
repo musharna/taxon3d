@@ -1,6 +1,7 @@
 import pytest
 from app import public_export as pe
 from app.models import Category, Generator, GoldPair, ModelOutput, Task
+from tests.factories import mark_evaluated
 
 
 def _mk(db):
@@ -32,6 +33,10 @@ def _mk(db):
     )
     db.add_all([o_ok, o_self, o_bad])
     db.flush()
+    # The gate fails closed, so an unevaluated output is not admitted and the export refuses to
+    # ship it. These fixtures are about licensing/posture/referential filtering, not about
+    # admissibility, so state plainly that the rubric has looked at them.
+    mark_evaluated(db, o_ok, o_self, o_bad)
     return locals()
 
 

@@ -32,6 +32,7 @@ from sqlalchemy import select
 from app import config, matchmaking, service
 from app.database import SessionLocal, init_db
 from app.models import Category, Generator, ModelOutput, Task
+from tests.factories import mark_evaluated
 
 
 def setup_module(_m):
@@ -137,6 +138,10 @@ def _task_with(db, *generators):
     db.add(t)
     db.flush()
     assert all(o.generator_id is not None for o in t.outputs), "fixture not persisted"
+    # The admissibility gate fails closed, so an output with no verdict is not in the pool at all
+    # and the roster assertions below would pass vacuously. These tests are about the PARADIGM
+    # roster, so admissibility has to be settled and out of the way.
+    mark_evaluated(db, *t.outputs)
     return t
 
 

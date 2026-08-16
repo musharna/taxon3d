@@ -8,6 +8,7 @@ import pytest
 from app import admissibility, config
 from app.database import SessionLocal, init_db
 from app.models import Admissibility, Generator, ModelOutput, Task
+from tests.factories import mark_evaluated
 
 
 def setup_module(_m):
@@ -33,6 +34,11 @@ def _rejected_semantic_output(db):
             version="semantic-v2",
         )
     )
+    # Give it an admitting STRUCTURAL verdict too. These tests isolate the semantic axis — does
+    # the mode put semantic in the rubric — and the gate now also withholds outputs no predicate
+    # has evaluated, so without this the advisory/off assertions below would fail on structural
+    # and prove nothing about the mode. Added after the semantic row so the explicit reject wins.
+    mark_evaluated(db, o)
     db.commit()
     return o.id
 

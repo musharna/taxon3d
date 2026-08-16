@@ -174,3 +174,44 @@ def overall_criterion(db) -> Criterion:
         db.add(c)
         db.commit()
     return c
+
+
+def mark_evaluated(db, *outputs):
+    """Fill in any MISSING structural/semantic verdict for `outputs` so the gate will admit them.
+
+    The gate fails closed: an output no predicate has evaluated is not admitted, exactly as in
+    production, where a freshly generated mesh is not votable until the semantic and completeness
+    passes have run. A fixture that builds a ModelOutput and expects it in the vote pool is
+    asserting something production would not do, so it has to say that these outputs were
+    evaluated.
+
+    Existing verdicts are left alone, and that matters: ingest.register_output already runs the
+    REAL structural evaluator against the asset it just wrote. Overwriting that with a blanket
+    admit would erase a genuine geometric rejection and quietly turn a fixture into a test that
+    can no longer fail on bad geometry. This only supplies what nothing computed.
+
+    Completeness is deliberately never written: it applies only to tasks carrying a TraitRubric
+    with an inventory-covered taxon, and inventing a category would put a made-up value on the
+    scorecard. A fixture needing completeness should add the Completeness row it means.
+
+    Accepts ModelOutput instances or bare ids. Caller flushes/commits as its fixture requires."""
+    from app.admissibility import Verdict
+    from app.models import Admissibility
+    from app.semantic import VERSION as SEMANTIC_VERSION
+    from app.structural import VERSION as STRUCTURAL_VERSION
+    from app.structural import upsert_verdict
+
+    ids = [o if isinstance(o, int) else o.id for o in outputs]
+    admit = Verdict(True, "", {"source": "test fixture"})
+    for oid in ids:
+        for predicate, version in (
+            ("structural", STRUCTURAL_VERSION),
+            ("semantic", SEMANTIC_VERSION),
+        ):
+            already = (
+                db.query(Admissibility).filter_by(output_id=oid, predicate=predicate).one_or_none()
+            )
+            if already is None:
+                upsert_verdict(db, oid, predicate, admit, version)
+    db.flush()
+    return ids
