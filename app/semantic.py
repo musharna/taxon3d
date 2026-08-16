@@ -165,9 +165,7 @@ def enumerate_semantic_work(db: Session, generators: list[str] | None = None) ->
 def _is_eligible(out: ModelOutput) -> bool:
     """Structural's breadth minus the two kinds the semantic judge cannot fairly read: a raw
     reference scan (renders as a point cloud) and an untextured mesh (a grey blob)."""
-    return not (
-        out.is_gold or is_reference_scan(out.source) or is_untextured_output(out)
-    )
+    return not (out.is_gold or is_reference_scan(out.source) or is_untextured_output(out))
 
 
 def applicable_output_ids(db: Session) -> set[int]:
