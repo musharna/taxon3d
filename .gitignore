@@ -13,3 +13,8 @@ data/assets/
 
 # SDD process scratch (briefs/reports/ledger) — never ship
 .superpowers/
+
+# Release bundles: meshes, textures and the built production SQLite (~4 GB).
+# This repo is deliberately CODE-ONLY and is public — committing a bundle would
+# redistribute provider-licensed outputs, not merely bloat the history.
+public_bundle/
