@@ -457,6 +457,46 @@ def _seed_int(*parts: str) -> int:
     return zlib.crc32("|".join(parts).encode()) & 0x7FFFFFFF
 
 
+SEED_FIXTURE_VERSION = "seed-fixture-v1"
+
+
+def _record_seed_admissibility(db: Session) -> dict:
+    """Give the demo corpus the admissibility verdicts the gate now requires.
+
+    The gate treats "no verdict" as "not admitted", so a freshly seeded instance would otherwise
+    have an empty arena: seed writes ModelOutput rows directly and never went through
+    ingest.register_output, which is where the structural hook lives. That is the same
+    one-path-only problem the gate itself was fixing, one layer down.
+
+    Structural is REAL here — the seeder just wrote those assets to disk, so the evaluator runs
+    against actual geometry and a genuinely degenerate fixture will be rejected on its merits.
+    Semantic cannot be: it needs a VLM call, which seeding has no business making. Those rows are
+    written as an explicit fixture verdict stamped SEED_FIXTURE_VERSION, so a real scorer run
+    overwrites them and anyone auditing the corpus can tell fabricated provenance from measured
+    provenance with one query. Completeness is not written at all — no seeded task carries a
+    TraitRubric, so the predicate does not apply and inventing a category would be a lie the
+    scorecard would then report."""
+    from . import structural
+    from .admissibility import Verdict
+    from .semantic import SemanticPredicate
+    from .structural import StructuralPredicate, upsert_verdict
+
+    struct_todo = sorted(StructuralPredicate().unevaluated_output_ids(db))
+    if struct_todo:
+        structural.evaluate_outputs(db, struct_todo)
+
+    sem_todo = sorted(SemanticPredicate().unevaluated_output_ids(db))
+    for oid in sem_todo:
+        upsert_verdict(
+            db,
+            oid,
+            "semantic",
+            Verdict(True, "", {"source": "seed fixture — no VLM call was made"}),
+            SEED_FIXTURE_VERSION,
+        )
+    return {"structural": len(struct_todo), "semantic": len(sem_todo)}
+
+
 def seed_all(db: Session | None = None, force: bool = False) -> dict:
     """Create demo data + assets. Returns a small summary dict."""
     init_db()
@@ -550,6 +590,8 @@ def seed_all(db: Session | None = None, force: bool = False) -> dict:
         seed_volumetric_subjects(db)
         seed_rose_subject(db)
         seed_soybean_subject(db)
+
+        _record_seed_admissibility(db)
 
         db.commit()
         return {

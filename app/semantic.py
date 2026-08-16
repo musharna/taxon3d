@@ -156,10 +156,27 @@ def enumerate_semantic_work(db: Session, generators: list[str] | None = None) ->
     for out in outs:
         if out.id in have:
             continue
-        if is_reference_scan(out.source) or is_untextured_output(out):
+        if not _is_eligible(out):
             continue
         work.append({"output_id": out.id, "taxon": taxon_by_task.get(out.task_id)})
     return work
+
+
+def _is_eligible(out: ModelOutput) -> bool:
+    """Structural's breadth minus the two kinds the semantic judge cannot fairly read: a raw
+    reference scan (renders as a point cloud) and an untextured mesh (a grey blob)."""
+    return not (
+        out.is_gold or is_reference_scan(out.source) or is_untextured_output(out)
+    )
+
+
+def applicable_output_ids(db: Session) -> set[int]:
+    """Outputs this predicate is expected to have a verdict for.
+
+    Same eligibility rule enumerate_semantic_work applies, expressed over the whole DB rather than
+    over "what still needs work" — one definition serving both the scorer's queue and the
+    admissibility gate's notion of a missing verdict."""
+    return {o.id for o in db.execute(select(ModelOutput)).scalars().all() if _is_eligible(o)}
 
 
 def evaluate_outputs(db: Session, work, *, client, sheet_for, emit_flags: bool) -> dict:
@@ -198,6 +215,17 @@ def evaluate_outputs(db: Session, work, *, client, sheet_for, emit_flags: bool) 
 class SemanticPredicate:
     name = "semantic"
     version = VERSION
+
+    def unevaluated_output_ids(self, db: Session) -> set[int]:
+        """Applicable outputs carrying no semantic verdict at all. Not VERSION-filtered — see
+        StructuralPredicate.unevaluated_output_ids for why a version bump must not gate the
+        corpus."""
+        return applicable_output_ids(db) - {
+            oid
+            for (oid,) in db.execute(
+                select(Admissibility.output_id).where(Admissibility.predicate == "semantic")
+            ).all()
+        }
 
     def rejected_output_ids(self, db: Session) -> set[int]:
         return {

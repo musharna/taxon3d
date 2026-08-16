@@ -93,6 +93,22 @@ def upsert_verdict(db: Session, output_id: int, predicate: str, verdict: Verdict
     return row
 
 
+def applicable_output_ids(db: Session) -> set[int]:
+    """Outputs this predicate is expected to have a verdict for: every non-gold output.
+
+    Gold is held-out ground truth and is never structurally scored, so it is outside the
+    applicability set rather than merely unscored — the admissibility gate needs that distinction
+    to tell "we chose not to evaluate this" from "we forgot to".
+
+    Single definition, two consumers: enumerate_structural_work (what still needs scoring) and
+    StructuralPredicate.unevaluated_output_ids (what must not be admitted for lack of a verdict).
+    They must not drift apart."""
+    return {
+        oid
+        for (oid,) in db.execute(select(ModelOutput.id).where(ModelOutput.is_gold.is_(False))).all()
+    }
+
+
 def enumerate_structural_work(db: Session) -> list[int]:
     """Output ids lacking a current-VERSION structural verdict (non-gold)."""
     have = {
@@ -103,11 +119,7 @@ def enumerate_structural_work(db: Session) -> list[int]:
             )
         ).all()
     }
-    all_ids = [
-        oid
-        for (oid,) in db.execute(select(ModelOutput.id).where(ModelOutput.is_gold.is_(False))).all()
-    ]
-    return [oid for oid in all_ids if oid not in have]
+    return sorted(applicable_output_ids(db) - have)
 
 
 def evaluate_outputs(db: Session, output_ids: list[int]) -> dict:
@@ -141,6 +153,20 @@ def evaluate_outputs(db: Session, output_ids: list[int]) -> dict:
 class StructuralPredicate:
     name = "structural"
     version = VERSION
+
+    def unevaluated_output_ids(self, db: Session) -> set[int]:
+        """Applicable outputs carrying no structural verdict at all.
+
+        Deliberately NOT filtered by VERSION: the hole being closed is "never evaluated", and
+        treating an older-scorer verdict as unevaluated would let a VERSION bump empty the arena
+        in one commit. A stale verdict is a weaker, separate problem, and re-running the scorer —
+        which enumerate_structural_work already targets by version — is its fix."""
+        return applicable_output_ids(db) - {
+            oid
+            for (oid,) in db.execute(
+                select(Admissibility.output_id).where(Admissibility.predicate == "structural")
+            ).all()
+        }
 
     def rejected_output_ids(self, db: Session) -> set[int]:
         return {

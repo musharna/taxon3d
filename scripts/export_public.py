@@ -21,7 +21,9 @@ from app import config, mesh_compress, mesh_lod, public_export, texture_downscal
 from app.database import SessionLocal  # noqa: E402
 from app.storage import StorageBackend, get_storage  # noqa: E402
 from app.models import (  # noqa: E402
+    Admissibility,
     Category,
+    Completeness,
     Criterion,
     Generator,
     Task,
@@ -65,6 +67,17 @@ EXPORT_MODELS = [
     GoldPair,
     ReconTask,
     TaskDifficulty,
+    # The admissibility evidence itself. Until this shipped, the public instance held 533 outputs
+    # and ZERO verdict rows: gating happened only at export, so the bundle was a pre-filtered
+    # corpus with no record of WHY anything was excluded, and the running app's pool gate was a
+    # no-op that returned the right answer purely because there was nothing left to reject.
+    #
+    # That is fine only while the gate fails open. It stops being fine the moment "no verdict"
+    # means "not admitted" — then a prod DB with no rows gates its entire corpus. Shipping the
+    # verdicts makes the public instance's gate real, auditable, and able to re-derive the same
+    # decision the export made. Children of ModelOutput, so they land after it.
+    Admissibility,
+    Completeness,
 ]
 
 
@@ -114,7 +127,10 @@ def _filtered_rows(db, inc: public_export.IncludeSet) -> dict[str, list[dict]]:
                 and getattr(r, "task_id", None) not in inc.task_ids
             ):
                 continue
-            if name == "metric" and getattr(r, "output_id", None) not in all_out:
+            if (
+                name in ("metric", "admissibility", "completeness")
+                and getattr(r, "output_id", None) not in all_out
+            ):
                 continue
             # Every cached board is keyed by generator, and a generator the posture dropped is not
             # in the bundle — so its rating row would dangle on import and, worse, would rank an
@@ -243,6 +259,11 @@ def export_bundle(
     inc = public_export.resolve_include_ids(
         db, task_titles=task_titles, generator_slugs=generator_slugs
     )
+    # Refuse BEFORE filtering. The gate now treats "never evaluated" as "not admitted", so an
+    # unscored output would otherwise be dropped by the filter below without a word — a smaller
+    # bundle that still reports success. Rejections stay silent (that IS the gate doing its job);
+    # only the outputs nobody looked at raise.
+    admissibility.assert_rubric_coverage(db, inc.output_ids | inc.gold_output_ids)
     gated = admissibility.non_admitted_output_ids(db)  # structural ∪ completeness ∪ semantic(gate)
     public_export.filter_include_for_posture(db, inc, posture, gated)
     public_export.filter_gold_for_posture(db, inc, posture, gated)
