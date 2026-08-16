@@ -5,7 +5,7 @@ from app.storage import LocalStorageBackend
 
 # reuse the _mk seed from test_public_export
 from tests.test_public_export import _mk
-from tests.factories import cascade_delete
+from tests.factories import cascade_delete, mark_evaluated
 
 
 def _clear_leaked_generators(db) -> None:
@@ -288,6 +288,9 @@ def test_display_allows_uncleared_input_recon(db_session, tmp_path):
     )
     db_session.add(o)
     db_session.flush()
+    # This test is about the DISPLAY posture's input-photo exemption, not about admissibility;
+    # without a verdict the gate would refuse the export before the posture logic ran.
+    mark_evaluated(db_session, o)
     store = LocalStorageBackend(tmp_path / "src_assets")
     manifest = export_bundle(
         db_session,

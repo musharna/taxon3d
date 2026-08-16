@@ -166,6 +166,24 @@ def enumerate_completeness_work(db, task_ids) -> list[dict]:
     return items
 
 
+def applicable_output_ids(db) -> set[int]:
+    """Outputs this predicate is expected to have a verdict for, across every task.
+
+    Completeness is the one predicate with a genuinely narrow domain: it scores an output against
+    its taxon's organ inventory, so it simply does not apply to a task with no TraitRubric, or one
+    whose taxon has no inventory entry. Those outputs are unscored *by design* and must never be
+    gated for it — which is exactly the distinction the admissibility gate needs to fail closed on
+    a missing verdict without condemning everything it was never going to score.
+
+    Defined by delegation to enumerate_completeness_work so the applicability rule has one home."""
+    from sqlalchemy import select
+
+    from app.models import Task
+
+    task_ids = [tid for (tid,) in db.execute(select(Task.id)).all()]
+    return {item["output_id"] for item in enumerate_completeness_work(db, task_ids)}
+
+
 def score_outputs(db, work, *, client, sheet_for, scorer_version: str) -> dict:
     """Score each work row: get its contact sheet (injected sheet_for), VLM-check, derive,
     upsert. Fail-loud per output (recorded, loop continues). Caller commits."""
