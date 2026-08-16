@@ -166,14 +166,10 @@ def test_rejection_and_non_evaluation_are_both_gated_together():
         unscored = _output(db, task)
         admitted = _output(db, task)
         db.add(
-            Completeness(
-                output_id=rejected.id, category="fragment", score=0.0, scorer_version="v1"
-            )
+            Completeness(output_id=rejected.id, category="fragment", score=0.0, scorer_version="v1")
         )
         db.add(
-            Completeness(
-                output_id=admitted.id, category="complete", score=1.0, scorer_version="v1"
-            )
+            Completeness(output_id=admitted.id, category="complete", score=1.0, scorer_version="v1")
         )
         db.commit()
 
@@ -221,9 +217,7 @@ def test_assert_rubric_coverage_ignores_outputs_outside_the_request():
         shipping = _output(db, task)
         not_shipping = _output(db, task)  # unscored, but not in the bundle
         db.add(
-            Completeness(
-                output_id=shipping.id, category="complete", score=1.0, scorer_version="v1"
-            )
+            Completeness(output_id=shipping.id, category="complete", score=1.0, scorer_version="v1")
         )
         db.commit()
         assert not_shipping.id is not None  # referenced so the fixture is not dead code
