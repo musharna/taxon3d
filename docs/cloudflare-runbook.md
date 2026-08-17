@@ -42,18 +42,24 @@ Now resolved in preference order, each trusted only when its flag is set:
 `CF-Connecting-IP` → `Fly-Client-IP` → `X-Forwarded-For` → socket peer.
 Covered by `tests/test_client_ip_trust.py`.
 
-## The two halves split, and only one needs a domain
+## The two halves split — BOTH are now unblocked
 
 **Analytics does NOT require DNS.** Cloudflare Web Analytics is "privacy-first analytics for your
-website without changing DNS or using Cloudflare proxy" — a beacon snippet is enough. So "are we
-getting visitors" can be answered today, on `taxon3d.org`, with nothing but a token.
+website without changing DNS or using Cloudflare proxy" — a beacon snippet is enough. Steps A is
+**done**: the beacon renders on all seven public pages.
 
-**The CDN half DOES require a domain you own.** Putting a site behind Cloudflare's proxy means
-adding it as a zone and pointing a registrar's nameservers at Cloudflare — impossible for a
-`*.fly.dev` hostname, which belongs to Fly. Edge caching therefore waits on acquiring a domain,
-and moving the public hostname carries an SEO cost: the sitemap, canonical links and OG tags all
-currently advertise `taxon3d.org`, so the indexed URLs would need redirects and
-re-verification.
+**The CDN half needed a domain — and now has one.** This section used to say edge caching "waits on
+acquiring a domain", because it was written when the public host was `bio3d-arena.fly.dev`. That is
+stale in two ways, and the rename's find/replace corrupted it further:
+
+- `taxon3d.org` exists and its **nameservers already point at Cloudflare** (`kallie` / `keanu`,
+  verified 2026-08-17). Steps 1 and 3 below are already done.
+- The old "moving the public hostname carries an SEO cost" caveat applied to _changing the
+  hostname_. Proxying does not change the hostname. **There is no SEO cost to Steps B.**
+
+**What actually remains is one toggle.** Measured 2026-08-17: the apex resolves to a Fly IP
+(`66.241.124.138`) and responses carry `server: Fly/…`, `via: 2 fly.io` with **no `cf-ray`** — the
+record is grey-cloud, so traffic is in Cloudflare's DNS but bypasses its edge entirely.
 
 ## Steps A — analytics only (no domain, ~5 minutes)
 
@@ -65,37 +71,71 @@ re-verification.
 
 Verify: `curl -s https://taxon3d.org/ | grep -c cloudflareinsights` → `1`.
 
-## Steps B — full proxy for edge caching (needs a domain you own)
+## Steps B — full proxy for edge caching
 
-1.  **Add the site** in Cloudflare and let it scan DNS.
-2.  **Point the record at Fly.** For an apex/subdomain served by Fly, a proxied (orange-cloud)
-    `CNAME` to `taxon3d.org`. The orange cloud is the part that matters — grey-cloud is
-    DNS-only and gives neither caching nor analytics.
-3.  **Update the nameservers** at the registrar to the pair Cloudflare shows. Propagation is
-    usually minutes.
+State as of 2026-08-17: steps 1, 3 and 5 are **already done**. Steps 2 and 4 are dashboard
+toggles; step 6 is the code side and is mine to run, but only after 2 lands.
+
+**Two prerequisites are non-obvious and each fails SILENTLY. Do not skip them.**
+
+0a. **Add a `_fly-ownership` TXT record BEFORE flipping to orange.** Fly issues certificates with
+TLS-ALPN-01, which requires Let's Encrypt to reach the origin directly. Once Cloudflare
+proxies the hostname, the public record shows a Cloudflare IP and that validation breaks —
+but the current certificate keeps working, so nothing appears wrong. It fails at RENEWAL.
+`flyctl certs show taxon3d.org` on 2026-08-17: Let's Encrypt, **expires in 2 months**, so a
+renewal is attempted in roughly one month. With ownership proven, Fly can validate through the
+proxy.
+
+Getting the value: `flyctl certs show` prints the `_fly-ownership` instructions only while a
+certificate is UNVERIFIED. Ours is verified through the direct path today, so it prints nothing
+useful — read the value from the **Fly dashboard → bio3d-arena → Certificates → `taxon3d.org`**,
+which shows it regardless of state, and add it as a **DNS-only (grey)** TXT record in Cloudflare.
+Do not invent the value; it is per-app.
+
+Also note `66.241.124.138` is a **shared** Fly ingress, so Fly routes by SNI. Cloudflare does send
+SNI to the origin, so proxying works — but that is exactly why SSL must be Full (strict) and the
+origin hostname must stay `taxon3d.org`.
+
+0b. **`.glb` is NOT in Cloudflare's default cacheable extension list.** The default list is
+`.css .js .jpg .png .gif .webp .svg .woff/.woff2 .pdf .ico .mp4 .zip` and similar. Flipping to
+orange with no Cache Rule leaves meshes at `cf-cache-status: DYNAMIC` — the origin round trip
+stays, and the entire point of Steps B is lost while the dashboard looks green.
+Add a **Cache Rule**: match `URI Path starts with "/media/"`, set _Cache eligibility_ to
+**Eligible for cache**, and _Edge TTL_ to **Use cache-control header from origin**
+(the app already sends `Cache-Control: public, max-age=3600` + a content-hashed `ETag`).
+
+1.  ~~**Add the site** in Cloudflare and let it scan DNS.~~ **Done.**
+2.  **Flip the existing record to proxied (orange cloud).** The apex `taxon3d.org` is an `A`
+    record to a Fly IP; leave the value alone and change only grey → orange. The orange cloud is
+    the part that matters — grey-cloud is DNS-only and gives no caching. Do `www` too if it is
+    also grey.
+3.  ~~**Update the nameservers** at the registrar.~~ **Done** — `kallie` / `keanu.ns.cloudflare.com`.
 4.  **SSL/TLS mode: Full (strict).** Fly already terminates TLS with a valid certificate;
-    "Flexible" would downgrade the origin hop to plaintext.
-5.  **Turn on Web Analytics** for the hostname and copy the beacon token.
-6.  **Set the app secrets:**
+    "Flexible" would downgrade the origin hop to plaintext. Anything less than Full (strict) with
+    a valid origin cert is what produces Cloudflare 525s on Fly.
+5.  ~~**Turn on Web Analytics** and copy the beacon token.~~ **Done** — `BIO3D_CF_ANALYTICS_TOKEN`
+    is already set and Deployed.
+6.  **Set the remaining app secret — AFTER step 2, never before:**
 
-        fly secrets set --app bio3d-arena \
-          BIO3D_BEHIND_CLOUDFLARE=true \
-          BIO3D_CF_ANALYTICS_TOKEN=<token from step 5>
+        fly secrets set --app bio3d-arena BIO3D_BEHIND_CLOUDFLARE=true
 
     `BIO3D_BEHIND_CLOUDFLARE` is what makes `CF-Connecting-IP` authoritative. **Set it only once
     traffic actually arrives via Cloudflare** — turning it on while requests still reach Fly
-    directly would trust a header nothing is stripping.
+    directly would trust a header nothing is stripping, and per-IP vote rate limiting becomes
+    forgeable. This restarts the app.
 
-7.  **If the hostname changes** (e.g. to a custom domain), also update `BIO3D_PUBLIC_BASE_URL` in
-    `fly.toml`, or canonical links, OG tags and the sitemap keep advertising the old host.
+7.  **If the hostname changes** (e.g. to a different custom domain), also update
+    `BIO3D_PUBLIC_BASE_URL` in `fly.toml`, or canonical links, OG tags and the sitemap keep
+    advertising the old host. **Steps B alone does not change the hostname**, so this does not
+    apply to the proxy flip.
 
 ## Verify after the flip
 
     # served through Cloudflare?
     curl -sI https://<host>/ | grep -iE 'server|cf-ray'          # expect server: cloudflare
 
-    # meshes cached AT THE EDGE, not just cacheable
-    curl -sI https://<host>/media/o/553.glb | grep -iE 'cf-cache-status|cache-control|age'
+    # meshes cached AT THE EDGE, not just cacheable. Use an id that exists — 400 and 500 are live.
+    curl -sI https://<host>/media/o/400.glb | grep -iE 'cf-cache-status|cache-control|age'
     # first hit MISS, second HIT
 
     # the beacon renders
@@ -104,8 +144,31 @@ Verify: `curl -s https://taxon3d.org/ | grep -c cloudflareinsights` → `1`.
     # rate limiting still sees distinct clients: send a bogus XFF and confirm it is IGNORED
     curl -sI -H 'X-Forwarded-For: 1.2.3.4' https://<host>/healthz
 
+    # the certificate can still RENEW through the proxy (see step 0a)
+    flyctl certs show taxon3d.org -a bio3d-arena                  # expect verified and active
+
 A `cf-cache-status: HIT` on the second mesh request is the whole point — that is the origin round
 trip disappearing.
+
+**`cf-cache-status: DYNAMIC` means the Cache Rule in step 0b is missing or not matching.** That is
+the expected failure if you flip the orange cloud and change nothing else, and it is easy to misread
+as success because the site still works and `server: cloudflare` still appears. The flip is only
+finished when a mesh reports HIT.
+
+### The measured before-picture, for comparison
+
+Taken 2026-08-17, direct to Fly with no edge cache:
+
+|                     |                               |
+| ------------------- | ----------------------------- |
+| HTML pages          | 0.20–0.31 s                   |
+| one mesh, 1.43 MB   | TTFB **0.78 s**, total 0.95 s |
+| one mesh, 1.83 MB   | TTFB **0.58 s**, total 0.75 s |
+| 8 concurrent meshes | 1.03 s wall, no degradation   |
+
+TTFB on a mesh is ~3x the whole HTML page because `media_asset` reads the entire object from R2
+into memory and hashes it before emitting a byte. A cache HIT should collapse that toward the
+HTML figure. If it does not, the rule is not matching.
 
 ## What this does NOT fix
 
