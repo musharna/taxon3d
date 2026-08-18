@@ -104,17 +104,23 @@ Add a **Cache Rule**: match `URI Path starts with "/media/"`, set _Cache eligibi
 **Eligible for cache**, and _Edge TTL_ to **Use cache-control header from origin**
 (the app already sends `Cache-Control: public, max-age=3600` + a content-hashed `ETag`).
 
+**The flip is the LAST dashboard action, not the first.** Everything else is staged while traffic
+still goes direct, so a mistake is invisible to visitors. Ordered for execution:
+
 1.  ~~**Add the site** in Cloudflare and let it scan DNS.~~ **Done.**
-2.  **Flip the existing record to proxied (orange cloud).** The apex `taxon3d.org` is an `A`
-    record to a Fly IP; leave the value alone and change only grey → orange. The orange cloud is
-    the part that matters — grey-cloud is DNS-only and gives no caching. Do `www` too if it is
-    also grey.
-3.  ~~**Update the nameservers** at the registrar.~~ **Done** — `kallie` / `keanu.ns.cloudflare.com`.
-4.  **SSL/TLS mode: Full (strict).** Fly already terminates TLS with a valid certificate;
-    "Flexible" would downgrade the origin hop to plaintext. Anything less than Full (strict) with
-    a valid origin cert is what produces Cloudflare 525s on Fly.
-5.  ~~**Turn on Web Analytics** and copy the beacon token.~~ **Done** — `BIO3D_CF_ANALYTICS_TOKEN`
+2.  ~~**Update the nameservers** at the registrar.~~ **Done** — `kallie` / `keanu.ns.cloudflare.com`.
+3.  ~~**Turn on Web Analytics** and copy the beacon token.~~ **Done** — `BIO3D_CF_ANALYTICS_TOKEN`
     is already set and Deployed.
+4.  **SSL/TLS mode: Full (strict) — SET THIS BEFORE THE FLIP.** Fly already terminates TLS with a
+    valid certificate; "Flexible" would downgrade the origin hop to plaintext. It is not merely
+    insecure: `fly.toml` sets `force_https = true`, so on Flexible Cloudflare connects over HTTP,
+    Fly 301s to HTTPS, and the site enters a **redirect loop the moment you go orange**. Anything
+    less than Full (strict) against a valid origin cert is also what produces Cloudflare 525s on
+    Fly.
+5.  **Flip the existing record to proxied (orange cloud) — DO THIS LAST.** The apex `taxon3d.org`
+    is an `A` record to a Fly IP; leave the value alone and change only grey → orange. The orange
+    cloud is the part that matters — grey-cloud is DNS-only and gives no caching. Do `www` too if
+    it is also grey.
 6.  **Set the remaining app secret — AFTER step 2, never before:**
 
         fly secrets set --app bio3d-arena BIO3D_BEHIND_CLOUDFLARE=true
