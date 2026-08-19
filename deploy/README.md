@@ -301,7 +301,7 @@ other host:
 
 ## What the public instance deliberately does not have
 
-- No path into the internal Agrigen filesystem (no `/home/user/agrigen` anywhere
+- No path into the internal ground-truth filesystem (no private absolute path anywhere
   in config)
 - No `BIO3D_GT_BUNDLE_DIR` — GT GLBs are pre-baked into the imported bundle's asset
   store, not read live from an internal directory

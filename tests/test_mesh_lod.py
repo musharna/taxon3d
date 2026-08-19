@@ -197,8 +197,8 @@ def test_the_pipeline_re_compresses_after_simplifying():
 
 # --------------------------------------------------------------------------- real execution
 
-_REAL_MESH = Path("/home/user/bio3d-arena/public_bundle/v2/assets")
-_NODE = Path("/home/user/miniconda3/envs/heirloom/bin/node")
+_REAL_MESH = Path(os.environ.get("BIO3D_REAL_MESH_DIR", ""))
+_NODE = Path(os.environ.get("BIO3D_NODE_BIN", ""))
 
 
 def _toolchain():

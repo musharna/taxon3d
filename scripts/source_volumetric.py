@@ -4,7 +4,7 @@ injected); `main()` (added later) wires app.volume_convert + a local volume dir.
 
 The pilot dataset is barley root MRI (IPK e!DAL, CC-BY-4.0) — a cereal stand-in for the
 verified maize-volumetric gap (no open maize anatomy volume exists). See
-docs/superpowers/specs/2026-06-23-volumetric-modality-design.md.
+the volumetric-modality design (internal).
 """
 
 from __future__ import annotations

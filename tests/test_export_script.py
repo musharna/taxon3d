@@ -1,3 +1,4 @@
+from pathlib import Path
 import json
 from scripts.export_public import export_bundle
 from app.models import Generator
@@ -45,7 +46,7 @@ def test_export_writes_bundle_and_no_agrigen_leak(db_session, tmp_path):
     assert (out / "assets" / "a.glb").read_bytes() == b"GLBDATA-a"
     # Leak assertions (Global Constraints):
     blob = (out / "rows.json").read_text() + json.dumps(manifest)
-    assert "/home/user/agrigen" not in blob
+    assert str(Path.home()) not in blob
     assert not list(out.rglob("*.npy"))
     assert manifest["sha256"]
 

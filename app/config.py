@@ -290,7 +290,7 @@ INTERNAL_PAGES_ENABLED = (
 # scripts/render_gt.py to bake per-species reference GLBs into bio3d's own asset store;
 # the running server never touches this path (stays decoupled from the scorer's FS).
 GT_BUNDLE_DIR = Path(
-    os.environ.get("BIO3D_GT_BUNDLE_DIR", "/home/user/agrigen/backend/data/gt_bundle_prod")
+    os.environ.get("BIO3D_GT_BUNDLE_DIR") or (Path.home() / ".local/share/bio3d/gt_bundle_prod")
 )
 # Storage subdir (relative to ASSET_DIR / S3 prefix) for baked GT reference GLBs.
 GT_ASSET_SUBDIR = "gt"

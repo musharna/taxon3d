@@ -2,7 +2,7 @@
 
 A Spotlight is a curated deep-dive on one benchmark subject, showing every model we
 have for it with all metrics, failure flags, and (Phase 2) critic notes. Internal
-inspection tool — see docs/superpowers/specs/2026-06-21-subject-spotlight-design.md.
+inspection tool.
 """
 
 from __future__ import annotations

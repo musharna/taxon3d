@@ -22,6 +22,7 @@ script can import it without standing up an engine.
 """
 
 from __future__ import annotations
+import sys
 
 import glob
 import io
@@ -52,7 +53,7 @@ def font(bold: bool, size: int) -> ImageFont.FreeTypeFont:
     name = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
     resolved: ImageFont.FreeTypeFont | None = None
     for pat in (
-        f"/home/user/miniconda3/lib/python3.13/site-packages/matplotlib/mpl-data/fonts/ttf/{name}",
+        f"{sys.prefix}/lib/python*/site-packages/matplotlib/mpl-data/fonts/ttf/{name}",
         f"/usr/share/fonts/truetype/dejavu/{name}",
         f"/usr/share/fonts/**/{name}",
     ):

@@ -1,6 +1,7 @@
 // Generate a single Helios tomato plant -> OBJ.  Usage: tomato_gen <out.obj> [seed]
 #include "CanopyGenerator.h"
 #include <string>
+#include <cstdlib>
 using namespace helios;
 int main(int argc, char** argv) {
     std::string out = (argc > 1) ? argv[1] : "tomato.obj";
@@ -11,7 +12,8 @@ int main(int argc, char** argv) {
     canopy_generator.seedRandomGenerator(seed);
     TomatoParameters params;
     // absolute leaf texture (default is relative + only resolves from the Helios root)
-    params.leaf_texture_file = "/home/user/Helios/plugins/canopygenerator/textures/TomatoLeaf_big.png";
+    params.leaf_texture_file = std::string(std::getenv("HELIOS_ROOT") ? std::getenv("HELIOS_ROOT") : "..")
+                             + "/plugins/canopygenerator/textures/TomatoLeaf_big.png";
     // one quad per leaf so the post-export Blender step applies the alpha-cutout leaf
     // texture per-leaf with clean UVs (default 4x3 grid shares a single 0-1 map).
     params.leaf_subdivisions = make_int2(1, 1);

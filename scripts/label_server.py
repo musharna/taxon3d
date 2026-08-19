@@ -9,7 +9,7 @@ consumes unchanged (it reads output_id/trait_key/trait_class/human_verdict; the 
   .venv/bin/python scripts/label_server.py \\
       --sample data/study/calibration_labels_2026-06-30.csv \\
       --store  data/study/calibration_labels_filled.csv \\
-      [--seed /mnt/c/Users/user/Desktop/bio3d-calibration/calibration_labels.csv]
+      [--seed /path/to/calibration_labels.csv]
 
 Then open http://127.0.0.1:8765 . Reads only the sample + image files; writes only the
 store CSV. Never touches the DB — calibration stays behind `ingest --commit`.

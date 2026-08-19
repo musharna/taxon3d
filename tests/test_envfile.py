@@ -1,7 +1,7 @@
 # tests/test_envfile.py
 """The repo's .env must actually reach os.environ.
 
-The bug this closes: OPENROUTER_API_KEY was set in /home/user/bio3d-arena/.env, but every
+The bug this closes: OPENROUTER_API_KEY was set in the repo .env, but every
 consumer does a bare os.environ["OPENROUTER_API_KEY"], no dotenv dependency was installed, and
 .env is gitignored — so a git worktree never even receives a copy. The key was "set" and
 simultaneously invisible to Python, repeatedly.

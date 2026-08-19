@@ -3,7 +3,7 @@ from pathlib import Path
 
 def test_public_env_has_no_agrigen_and_disables_scoring():
     env = Path("deploy/.env.public.example").read_text()
-    assert "/home/user/agrigen" not in env
+    assert str(Path.home()) not in env  # no private absolute path may reach the public env
     assert "BIO3D_GT_BUNDLE_DIR" not in env
     assert "BIO3D_RECON_SCORER_URL=" in env
     # scorer URL must be empty on the public instance

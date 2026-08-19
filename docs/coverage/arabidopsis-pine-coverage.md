@@ -1,8 +1,7 @@
 # Arabidopsis + Pine Coverage Parity — Result
 
 > Date: 2026-06-26
-> Plan: docs/superpowers/plans/2026-06-26-arabidopsis-pine-coverage-parity.md
-> Spec: docs/superpowers/specs/2026-06-26-arabidopsis-pine-coverage-parity-design.md
+> Plan and spec: internal.
 
 ## Outcome
 

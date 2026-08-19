@@ -84,7 +84,7 @@ screenshots + verify 3D viewer runtime before the visual fixes are called done.
       CASP TM-score, equal-length-only). Pure Python/numpy, no external binaries. `app/validation.py` + `app/validation_service.py`, `/admin/revalidate` batch, 1CRN reference demo (near TM 0.94 /
       far TM 0.27), 19 tests incl. a real-1CRN execution gate. Validation never enters the blind vote.
       Deferred (not done): lDDT/pLDDT, GDT-TS, real MolProbity/TM-align binaries, sequence-independent
-      alignment (the equal-length boundary). Plan `docs/superpowers/plans/2026-06-20-structure-validation.md`.
+      alignment (the equal-length boundary). Plan: internal.
 
 ### B4. Transparency
 
