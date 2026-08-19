@@ -51,7 +51,7 @@ from tests.factories import mark_evaluated
 
 # The recon bake-off GLBs double as "generated plants" for the cross-paradigm matchup. They
 # live in the sibling AgriGen tree, absent in CI / on other checkouts — skip there.
-BAKE = Path(os.environ.get("BIO3D_BAKEOFF_DIR", ""))
+BAKE = Path(os.environ.get("BIO3D_BAKEOFF_DIR") or "/nonexistent/bio3d-fixture")
 
 SCOPE = "category=synthetic-plants&criterion=botanical_plausibility"
 

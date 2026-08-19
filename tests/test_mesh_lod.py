@@ -197,8 +197,8 @@ def test_the_pipeline_re_compresses_after_simplifying():
 
 # --------------------------------------------------------------------------- real execution
 
-_REAL_MESH = Path(os.environ.get("BIO3D_REAL_MESH_DIR", ""))
-_NODE = Path(os.environ.get("BIO3D_NODE_BIN", ""))
+_REAL_MESH = Path(os.environ.get("BIO3D_REAL_MESH_DIR") or "/nonexistent/bio3d-fixture")
+_NODE = Path(os.environ.get("BIO3D_NODE_BIN") or "/nonexistent/bio3d-fixture")
 
 
 def _toolchain():
