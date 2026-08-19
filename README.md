@@ -98,7 +98,7 @@ fidelity, not taste.
 Single FastAPI app, server-rendered (Jinja2) + vanilla JS, SQLAlchemy over SQLite
 (dev) or Postgres (deployed), 3D rendered client-side. One Docker container; asset
 blobs on local disk or S3-compatible object storage. The live instance runs on
-Fly.io with Neon Postgres and Cloudflare R2 — see [`deploy/README.md`](deploy/README.md). See [`docs/superpowers/specs/2026-06-20-bio3d-arena-design.md`](docs/superpowers/specs/2026-06-20-bio3d-arena-design.md)
+Fly.io with Neon Postgres and Cloudflare R2 — see [`deploy/README.md`](deploy/README.md)
 for the full design (data model, ranking methodology, deployment, roadmap).
 
 ```

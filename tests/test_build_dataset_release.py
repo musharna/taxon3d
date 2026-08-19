@@ -47,7 +47,7 @@ def test_build_release_decorates_bundle_and_no_leak(db_session, tmp_path):
     assert not list(out.rglob("*.npy"))
     for p in out.rglob("*"):
         if p.is_file():
-            assert "/home/user/agrigen" not in p.read_bytes().decode("utf-8", "ignore")
+            assert str(Path.home()) not in p.read_bytes().decode("utf-8", "ignore")
     assert summary["tarball"].endswith(".tar.gz") and Path(summary["tarball"]).exists()
 
 

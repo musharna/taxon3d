@@ -2,7 +2,7 @@
 
 > **Status:** internal results report, 2026-06-21. Pilot (3 baselines), run on a local dev
 > instance. The pre-registered methodology lives in the AgriGen tree
-> (`docs/superpowers/specs/2026-06-20-bio3d-arena-benchmark-methodology.md`); this report is
+> (internal benchmark-methodology spec); this report is
 > the post-hoc result against it. A formal/external write-up requires a citation audit first
 > (deferred to the pre-release review).
 

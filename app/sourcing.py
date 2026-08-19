@@ -1,6 +1,6 @@
 """License classification + depiction labeling for externally-sourced 3D models.
 
-Pure functions, no I/O. See docs/superpowers/specs/2026-06-21-external-model-sourcing-design.md.
+Pure functions, no I/O.
 Private-tool policy: host any CC/public-domain license (incl. NC/ND); exclude
 all-rights-reserved/unmarked. `public_safe` marks the stricter set for the future
 pre-public cleanup.

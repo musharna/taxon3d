@@ -22,7 +22,7 @@ _BINARY_PATH_PARTS = {"assets", "gt"}
 def _assert_no_leak(root: Path) -> None:
     if list(root.rglob("*.npy")):
         raise RuntimeError(f"release {root} contains raw .npy GT — refusing to publish")
-    needles = ("/home/user/agrigen", str(config.GT_BUNDLE_DIR))
+    needles = (str(Path.home()), str(config.GT_BUNDLE_DIR))
     for p in root.rglob("*"):
         if not p.is_file():
             continue

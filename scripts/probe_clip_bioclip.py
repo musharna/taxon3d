@@ -2,7 +2,7 @@
 detects each reference-image defect (fruit_only, wrong_species, poor_exemplar) — across
 IN-DOMAIN real photos and OUT-OF-DOMAIN 3D-render sheets.
 
-Reads a hand-labeled manifest (docs/superpowers/probe_labels.json), runs the applicable
+Reads a hand-labeled manifest (docs/probe_labels.json), runs the applicable
 mechanisms per item, aggregates a per-(mechanism, defect) confusion matrix via the pure
 `confusion()` function, writes a markdown + CSV report, and prints a decision table:
 

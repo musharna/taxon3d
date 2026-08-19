@@ -33,6 +33,7 @@ for a reason that has nothing to do with the chain.
 """
 
 from __future__ import annotations
+import os
 
 from pathlib import Path
 
@@ -50,7 +51,7 @@ from tests.factories import mark_evaluated
 
 # The recon bake-off GLBs double as "generated plants" for the cross-paradigm matchup. They
 # live in the sibling AgriGen tree, absent in CI / on other checkouts — skip there.
-BAKE = Path("/home/user/agrigen/backend/data/bakeoff_v1")
+BAKE = Path(os.environ.get("BIO3D_BAKEOFF_DIR", ""))
 
 SCOPE = "category=synthetic-plants&criterion=botanical_plausibility"
 

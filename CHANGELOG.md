@@ -4,7 +4,7 @@ Notable changes to Taxon3D, a multi-paradigm benchmark arena for biological 3D g
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Entries are
 milestone-level, not commit-level. For commit detail, see `git log`; most milestones also carry a
-design spec under `docs/superpowers/specs/`.
+design spec (internal).
 
 ## [Unreleased]
 

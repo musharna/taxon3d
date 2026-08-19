@@ -18,3 +18,7 @@ data/assets/
 # This repo is deliberately CODE-ONLY and is public — committing a bundle would
 # redistribute provider-licensed outputs, not merely bloat the history.
 public_bundle/
+
+# Internal planning notes (plans/specs) and agent config — never publish
+docs/superpowers/
+CLAUDE.md

@@ -32,7 +32,6 @@ MODEL_VIEWER_CDN = "https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/mod
 #: A bundle carries `x.glb` beside `x.lod.glb`. Point at any directory that has such a pair.
 ASSET_DIRS = [
     Path(os.environ.get("BIO3D_LOD_TEST_ASSETS", "")),
-    Path("/home/user/bio3d-arena/public_bundle/v3/assets"),
 ]
 
 PAGE = """<!doctype html><html><head><meta charset="utf-8">

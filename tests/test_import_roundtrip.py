@@ -1,3 +1,4 @@
+from pathlib import Path
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from app.models import Generator, GoldPair, ModelOutput, Task
@@ -59,7 +60,7 @@ def test_roundtrip_matches_and_no_leak(db_session, tmp_path):
     # leak grep over the whole bundle tree
     for p in out.rglob("*"):
         if p.is_file():
-            assert "/home/user/agrigen" not in p.read_bytes().decode("utf-8", "ignore")
+            assert str(Path.home()) not in p.read_bytes().decode("utf-8", "ignore")
     assert not list(out.rglob("*.npy"))
 
 
