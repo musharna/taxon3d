@@ -73,8 +73,10 @@ Verify: `curl -s https://taxon3d.org/ | grep -c cloudflareinsights` → `1`.
 
 ## Steps B — full proxy for edge caching
 
-State as of 2026-08-17: steps 1, 3 and 5 are **already done**. Steps 2 and 4 are dashboard
-toggles; step 6 is the code side and is mine to run, but only after 2 lands.
+> **DONE 2026-08-20 — taxon3d.org is live behind the proxy and meshes `HIT` at the edge.** Kept as
+> the record of how, and of the two faults that made a correct-looking setup cache nothing: assets
+> minted a session cookie, and the Cache Rule was unnamed so it was never deployed. Both are written
+> up below. Still open: HTML is uncached, because Cloudflare does not cache `text/html` by default.
 
 **Two prerequisites are non-obvious and each fails SILENTLY. Do not skip them.**
 
@@ -219,7 +221,39 @@ accounting onto a single identity. Keep the responses cookie-free instead.
 Note the HTML row too — `s-maxage=300` on a public page buys nothing without a Cache Rule making
 HTML eligible, so the crawler protection added after the Neon outage is not actually active at the
 edge. Lower stakes now that prod is on a Fly volume rather than Neon, but it is not doing what its
-comment claims.
+comment claims. **Still open.**
+
+### An UNNAMED Cache Rule is never deployed, and looks exactly like a correct one
+
+With the cookie fixed, meshes were still `DYNAMIC` while the rule appeared to exist. The cause was
+not the expression and not the settings: **the rule had no name, so it was never deployed.**
+Cloudflare's builder holds an unnamed rule in a state that reads as authored — the expression is
+right there on screen — while nothing is live. Naming it and deploying fixed it on the next request,
+with nothing else changed.
+
+So when a rule looks right and the status is still `DYNAMIC`, **check that it is named and deployed
+before you re-read the expression.** Nothing about this is visible from outside; without a Cloudflare
+API token (we have none — `~/.bio3d-deploy.env` carries only `BIO3D_*` and R2 S3 keys) it can only
+be confirmed in the dashboard.
+
+### After — measured 2026-08-20, same probes
+
+| probe                | before TTFB | after (`HIT`) | before total | after total |
+| -------------------- | ----------- | ------------- | ------------ | ----------- |
+| mesh 1.43 MB (`400`) | 0.78 s      | **0.14 s**    | 0.95 s       | **0.27 s**  |
+| mesh 1.83 MB (`500`) | 0.58 s      | **0.14 s**    | 0.75 s       | **0.28 s**  |
+
+**~4-5x on mesh TTFB.** That is the figure the whole exercise was about: `media_asset` reads the
+entire object from R2 into memory and hashes it before emitting a byte, and a `HIT` skips all of it.
+
+A cold `MISS` still pays the full origin path (~0.31-0.36 s TTFB), so the first voter to see a given
+mesh pays and everyone behind them does not.
+
+Concurrency is **not** directly comparable to the baseline below: that run used 8 mesh ids, only 5 of
+which still resolve, and those 5 warm returned in 0.40 s wall.
+
+Verify the safety property whenever you touch caching: every cached response must carry **zero**
+`Set-Cookie`, and `/arena` must still hand _distinct_ session ids to distinct visitors.
 
 ### The measured before-picture, for comparison
 
