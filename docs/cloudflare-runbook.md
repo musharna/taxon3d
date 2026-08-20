@@ -78,19 +78,40 @@ toggles; step 6 is the code side and is mine to run, but only after 2 lands.
 
 **Two prerequisites are non-obvious and each fails SILENTLY. Do not skip them.**
 
-0a. **Add a `_fly-ownership` TXT record BEFORE flipping to orange.** Fly issues certificates with
-TLS-ALPN-01, which requires Let's Encrypt to reach the origin directly. Once Cloudflare
+0a. **Add the `_acme-challenge` CNAMEs BEFORE flipping to orange.** Fly is currently validating
+with TLS-ALPN-01, which requires Let's Encrypt to reach the origin directly. Once Cloudflare
 proxies the hostname, the public record shows a Cloudflare IP and that validation breaks —
 but the current certificate keeps working, so nothing appears wrong. It fails at RENEWAL.
 `flyctl certs show taxon3d.org` on 2026-08-17: Let's Encrypt, **expires in 2 months**, so a
-renewal is attempted in roughly one month. With ownership proven, Fly can validate through the
-proxy.
+renewal is attempted in roughly one month. DNS-01 validation does not care what the A record
+points at, so it survives the proxy.
 
-Getting the value: `flyctl certs show` prints the `_fly-ownership` instructions only while a
-certificate is UNVERIFIED. Ours is verified through the direct path today, so it prints nothing
-useful — read the value from the **Fly dashboard → bio3d-arena → Certificates → `taxon3d.org`**,
-which shows it regardless of state, and add it as a **DNS-only (grey)** TXT record in Cloudflare.
-Do not invent the value; it is per-app.
+> **CORRECTED 2026-08-20.** This step previously said to add a `_fly-ownership` TXT record read
+> from the Fly dashboard. **No such record exists** — that was my error, and it sent the reader
+> hunting the Fly UI for a value that was never there. Fly's mechanism is a **CNAME** at
+> `_acme-challenge.<hostname>`.
+
+Getting the values: `flyctl certs show` prints validation instructions only while a certificate is
+UNVERIFIED, and ours is verified through the direct path today. Query the API instead — it reports
+them regardless of state:
+
+    flyctl certs list -a bio3d-arena          # hostnames needing records
+    TOK=$(flyctl auth token)
+    curl -s https://api.fly.io/graphql -H "Authorization: Bearer $TOK" \
+      -H 'Content-Type: application/json' \
+      -d '{"query":"query{app(name:\"bio3d-arena\"){certificates{nodes{hostname acmeDnsConfigured acmeAlpnConfigured dnsValidationInstructions}}}}"}'
+
+Measured 2026-08-20 — **both** certificates need a record, and each target is distinct:
+
+| Name (Cloudflare)     | Type  | Target                                |
+| --------------------- | ----- | ------------------------------------- |
+| `_acme-challenge`     | CNAME | `taxon3d.org.jqrrqxd.flydns.net.`     |
+| `_acme-challenge.www` | CNAME | `www.taxon3d.org.jqrrqxd.flydns.net.` |
+
+Both **DNS only (grey)** — proxying them would answer with Cloudflare IPs and defeat the
+validation. The `jqrrqxd` segment is per-app; re-read it from the API rather than copying it here
+if the app is ever recreated. Confirm with
+`dig _acme-challenge.taxon3d.org CNAME +short` and by watching `acmeDnsConfigured` flip to `true`.
 
 Also note `66.241.124.138` is a **shared** Fly ingress, so Fly routes by SNI. Cloudflare does send
 SNI to the origin, so proxying works — but that is exactly why SSL must be Full (strict) and the
