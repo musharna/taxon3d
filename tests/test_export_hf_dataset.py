@@ -287,3 +287,21 @@ def test_missing_source_mesh_raises(db_session, tmp_path, monkeypatch):
     monkeypatch.setattr(hf, "_asset_root", lambda: Path(tmp_path / "definitely-not-here"))
     with pytest.raises(FileNotFoundError):
         hf.copy_meshes(db_session, inc, tmp_path)
+
+
+def test_card_states_the_licence_and_the_exclusions(db_session, tmp_path):
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    tables = hf.build_tables(db_session, inc)
+    hf.write_cards(tmp_path, tables, n_meshes=len(tables["outputs"]))
+
+    card = (tmp_path / "README.md").read_text()
+    assert "CC-BY-4.0" in card
+    # A reader must not infer the corpus is the whole arena.
+    assert "commercial" in card.lower()
+    # Recon inputs are absent by design; say so rather than let it look like an oversight.
+    assert "reference photo" in card.lower() or "input photo" in card.lower()
+
+    transform = (tmp_path / "TRANSFORM.md").read_text()
+    assert "mesh_compress" in transform
+    assert "texture_downscale" in transform
