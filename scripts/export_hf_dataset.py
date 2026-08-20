@@ -14,15 +14,17 @@ import shutil
 import sys
 from pathlib import Path
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import admissibility
-from app import config
-from app import public_export
-from app.database import SessionLocal
-from app.kingdoms import KINGDOM_OF
-from app.models import (
+from sqlalchemy import select  # noqa: E402
+from sqlalchemy.orm import Session  # noqa: E402
+
+from app import admissibility  # noqa: E402
+from app import config  # noqa: E402
+from app import public_export  # noqa: E402
+from app.database import SessionLocal  # noqa: E402
+from app.kingdoms import KINGDOM_OF  # noqa: E402
+from app.models import (  # noqa: E402
     Admissibility,
     Category,
     Comparison,
@@ -34,8 +36,8 @@ from app.models import (
     Task,
     Vote,
 )
-from app.public_export import IncludeSet
-from app.reference_provenance import (
+from app.public_export import IncludeSet  # noqa: E402
+from app.reference_provenance import (  # noqa: E402
     assert_recon_photos_cleared,
     assert_recon_photos_cleared_for_gold,
 )
