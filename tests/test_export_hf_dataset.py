@@ -253,3 +253,37 @@ def test_outputs_carry_licence_and_attribution_fields(db_session):
     for row in hf.build_tables(db_session, inc)["outputs"]:
         assert "license" in row and "attribution" in row
         assert row["mesh_path"] == f"meshes/{row['output_id']}.glb"
+
+
+def test_meshes_are_byte_identical_originals(db_session, tmp_path):
+    """Uncompressed and unmodified. The admissibility verdicts describe THESE bytes — every
+    verdict was computed by rendering ASSET_DIR/asset_path (app/judge_render.py:114), so any
+    transform here silently decouples the headline table from the meshes it describes."""
+    from pathlib import Path
+
+    from app import config
+
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    written = hf.copy_meshes(db_session, inc, tmp_path)
+
+    assert written > 0
+    for oid in inc.output_ids:
+        src = Path(config.ASSET_DIR) / db_session.get(ModelOutput, oid).asset_path
+        if not src.exists():
+            continue
+        dst = tmp_path / "meshes" / f"{oid}.glb"
+        assert dst.exists(), f"missing mesh for output {oid}"
+        assert dst.read_bytes() == src.read_bytes(), f"mesh {oid} was modified in transit"
+
+
+def test_missing_source_mesh_raises(db_session, tmp_path, monkeypatch):
+    """Fail loud, never skip. A short export that reports success is the failure mode this
+    whole gate chain exists to prevent."""
+    from pathlib import Path
+
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    monkeypatch.setattr(hf, "_asset_root", lambda: Path(tmp_path / "definitely-not-here"))
+    with pytest.raises(FileNotFoundError):
+        hf.copy_meshes(db_session, inc, tmp_path)

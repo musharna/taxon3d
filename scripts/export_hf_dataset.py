@@ -8,10 +8,14 @@ predicate is how a mesh we have no right to ship would eventually ship.
 
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import admissibility
+from app import config
 from app import public_export
 from app.kingdoms import KINGDOM_OF
 from app.models import (
@@ -183,3 +187,30 @@ def build_tables(db: Session, inc: IncludeSet) -> dict[str, list[dict]]:
         "votes": votes,
         "judge_ratings": judge,
     }
+
+
+def _asset_root() -> Path:
+    """Indirection so a test can point the root somewhere empty and prove we fail loud."""
+    return Path(config.ASSET_DIR)
+
+
+def copy_meshes(db: Session, inc: IncludeSet, out_dir: Path) -> int:
+    """Copy each cleared output's ORIGINAL mesh to out_dir/meshes/<output_id>.glb.
+
+    No Draco, no texture downscale, no LOD. The site bundle applies those to a COPY at export
+    time; the admissibility verdicts describe the original, so the original is what ships.
+    Renaming to <output_id>.glb also drops the descriptive asset keys (e.g.
+    `commissioned/openrouter-anthropic-claude-opus-4-8_11.glb`) and gives the tables a join key.
+    """
+    meshes = Path(out_dir) / "meshes"
+    meshes.mkdir(parents=True, exist_ok=True)
+    root = _asset_root()
+    written = 0
+    for oid in sorted(inc.output_ids):
+        o = db.get(ModelOutput, oid)
+        src = root / o.asset_path
+        if not src.exists():
+            raise FileNotFoundError(f"output {oid}: asset missing at {src}")
+        shutil.copyfile(src, meshes / f"{oid}.glb")
+        written += 1
+    return written
