@@ -214,8 +214,10 @@ biologically admissible** — not just whether people liked it.
 
 Most 3D generation benchmarks rank outputs by human preference alone. Taxon3D runs every candidate
 through a pre-vote admissibility gate first: an output is admitted only if it passes *every*
-predicate (structural integrity, semantic identity, organism completeness). The `admissibility`
-table is that judgement, and it is the point of this dataset.
+predicate in the active rubric (structural integrity and organism completeness always; semantic
+identity too, when the semantic predicate is running in gate mode, which it is in production
+today — see `app/admissibility.py`'s `DEFAULT_RUBRIC` and `_effective_rubric`). The
+`admissibility` table is that judgement, and it is the point of this dataset.
 
 Live arena: https://taxon3d.org
 
@@ -259,8 +261,14 @@ _TRANSFORM = """# Reproducing the voter-facing meshes
 deterministic steps, in this order:
 
 1. **Texture downscale** — `app/texture_downscale.py`, PIL Lanczos resize re-encoded as WebP
-   quality 97. (Measured alternative for the record: `gltf-transform resize` scored 28.5 dB PSNR
-   against 43.5 dB for this path, which is why it is not used.)
+   quality 97 at a 1536px long-edge cap. Two separate measurements are documented there, not one
+   head-to-head, and this note keeps them separate on purpose:
+   - Size-matched (~0.52-0.53 MB) against `gltf-transform resize` re-encoding the same source:
+     28.5 dB PSNR for `gltf-transform resize` vs **42.2 dB** for PIL Lanczos + WebP at quality 92
+     — this is the comparison that ruled `gltf-transform resize` out.
+   - The shipped config (1536px, quality 97) was chosen from a separate sweep with no
+     `gltf-transform` comparison at that setting: **43.5 dB**, PSNR computed only over visible
+     (alpha > 250) pixels at the viewer's render size.
 2. **Geometry compression** — `app/mesh_compress.py`, Draco via `gltf-transform`. Kept only when
    it actually shrinks the file; when Draco enlarges a mesh the original ships unchanged.
 
