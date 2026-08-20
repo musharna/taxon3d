@@ -256,6 +256,18 @@ def _is_cacheable_page(path: str) -> bool:
     return path in _CACHEABLE_PATHS or path.startswith(_CACHEABLE_PREFIXES)
 
 
+#: Asset routes. These carry bytes, never per-visitor content, and their handlers set their own
+#: `Cache-Control` + `ETag`. The one thing they need from `ensure_session` is to be left alone:
+#: a `Set-Cookie` on an asset is what stops a shared cache from storing it at all. Measured
+#: 2026-08-20, minutes after the Cloudflare flip — `/static/og-default.png` came back
+#: `cf-cache-status: BYPASS` purely because it minted a session.
+_ASSET_PREFIXES = ("/media/", "/static/", "/assets/")
+
+
+def _is_asset(path: str) -> bool:
+    return path.startswith(_ASSET_PREFIXES)
+
+
 @app.middleware("http")
 async def ensure_session(request: Request, call_next):
     """Attach an anonymous session id (cookie) used for light dedup + history.
@@ -323,7 +335,12 @@ async def ensure_session(request: Request, call_next):
         and response.status_code == 200
         and _is_cacheable_page(request.url.path)
     )
-    if is_new and not cacheable:
+    # Both halves of "a shared cache may hold this" must stay cookie-free, and for the same
+    # reason: an edge that cached a `Set-Cookie` would hand one visitor's session id to everyone
+    # served after them. Assets are checked on PATH ALONE, deliberately — gating them on
+    # `status_code == 200` the way pages are would put a cookie back on a 304, which is the
+    # revalidation a warm cache issues most.
+    if is_new and not cacheable and not _is_asset(request.url.path):
         response.set_cookie(
             SESSION_COOKIE,
             sid,
