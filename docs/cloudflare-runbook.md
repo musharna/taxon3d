@@ -166,18 +166,23 @@ still goes direct, so a mistake is invisible to visitors. Ordered for execution:
 
 ## Verify after the flip
 
+**Use GET, not `curl -sI`.** This app rejects HEAD with a 405, so every `-I` probe reports a
+failure that has nothing to do with Cloudflare. Discard the body instead:
+
+    probe() { curl -s -o /dev/null -D - "$@"; }   # "$@", so header flags pass through
+
     # served through Cloudflare?
-    curl -sI https://<host>/ | grep -iE 'server|cf-ray'          # expect server: cloudflare
+    probe https://<host>/ | grep -iE '^server:|^cf-ray'           # expect server: cloudflare
 
     # meshes cached AT THE EDGE, not just cacheable. Use an id that exists — 400 and 500 are live.
-    curl -sI https://<host>/media/o/400.glb | grep -iE 'cf-cache-status|cache-control|age'
+    probe https://<host>/media/o/400.glb | grep -iE '^cf-cache-status|^set-cookie|^age:'
     # first hit MISS, second HIT
 
     # the beacon renders
     curl -s https://<host>/ | grep -c cloudflareinsights          # expect 1
 
     # rate limiting still sees distinct clients: send a bogus XFF and confirm it is IGNORED
-    curl -sI -H 'X-Forwarded-For: 1.2.3.4' https://<host>/healthz
+    probe -H 'X-Forwarded-For: 1.2.3.4' https://<host>/healthz
 
     # the certificate can still RENEW through the proxy (see step 0a)
     flyctl certs show taxon3d.org -a bio3d-arena                  # expect verified and active
@@ -185,10 +190,36 @@ still goes direct, so a mistake is invisible to visitors. Ordered for execution:
 A `cf-cache-status: HIT` on the second mesh request is the whole point — that is the origin round
 trip disappearing.
 
-**`cf-cache-status: DYNAMIC` means the Cache Rule in step 0b is missing or not matching.** That is
-the expected failure if you flip the orange cloud and change nothing else, and it is easy to misread
-as success because the site still works and `server: cloudflare` still appears. The flip is only
-finished when a mesh reports HIT.
+### Reading the cache status — measured 2026-08-20, the day of the flip
+
+The flip landed cleanly (`server: cloudflare`, `cf-ray` on everything, certs healthy) and **nothing
+was cached at all**. Three surfaces, three different reasons, and the status code is what tells them
+apart. Check `set-cookie` on the same response every time you read `cf-cache-status`.
+
+| surface                  | status    | cause                                                      |
+| ------------------------ | --------- | ---------------------------------------------------------- |
+| `/` (HTML)               | `DYNAMIC` | Cloudflare does not cache `text/html` by default at all    |
+| `/static/og-default.png` | `BYPASS`  | default-cacheable extension, **refused over `Set-Cookie`** |
+| `/media/o/400.glb`       | `DYNAMIC` | not default-cacheable AND carried `Set-Cookie`             |
+
+**`BYPASS` is the cookie. `DYNAMIC` is eligibility.** `BYPASS` means the edge would have cached the
+response and declined — on this app that is almost always a `Set-Cookie`. `DYNAMIC` means it never
+considered the response cacheable, which points at a missing or non-matching Cache Rule. Conflating
+them sends you to the dashboard for a problem that is in the application.
+
+The cookie half was ours: `ensure_session` suppressed `Set-Cookie` only for `_CACHEABLE_PATHS`, the
+read-only HTML pages, so every mesh and static file minted a session and became uncacheable. Fixed
+by exempting `_ASSET_PREFIXES` too, covered by `tests/test_asset_responses_are_cookie_free.py`.
+
+**Do not "fix" this by telling Cloudflare to cache `Set-Cookie` responses.** It is offered, and here
+it is a vulnerability rather than a shortcut: the edge would serve one visitor's `bio3d_session` to
+everyone who received that cached mesh afterwards, collapsing vote dedup and the gold/trust
+accounting onto a single identity. Keep the responses cookie-free instead.
+
+Note the HTML row too — `s-maxage=300` on a public page buys nothing without a Cache Rule making
+HTML eligible, so the crawler protection added after the Neon outage is not actually active at the
+edge. Lower stakes now that prod is on a Fly volume rather than Neon, but it is not doing what its
+comment claims.
 
 ### The measured before-picture, for comparison
 
