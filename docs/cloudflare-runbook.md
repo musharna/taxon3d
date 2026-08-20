@@ -110,8 +110,16 @@ Measured 2026-08-20 — **both** certificates need a record, and each target is 
 
 Both **DNS only (grey)** — proxying them would answer with Cloudflare IPs and defeat the
 validation. The `jqrrqxd` segment is per-app; re-read it from the API rather than copying it here
-if the app is ever recreated. Confirm with
-`dig _acme-challenge.taxon3d.org CNAME +short` and by watching `acmeDnsConfigured` flip to `true`.
+if the app is ever recreated.
+
+**`acmeDnsConfigured` does not flip on its own.** After adding the records it stayed `false` while
+`dig` already returned both CNAMEs correctly — Fly caches the result and only re-evaluates when
+asked. Run `flyctl certs check <hostname> -a bio3d-arena` for each hostname, then re-query. Without
+that, a correct configuration reads as a failed one. **Verified 2026-08-20: both `true`.**
+
+The validation target itself answers nothing between renewals — `dig taxon3d.org.jqrrqxd.flydns.net
+TXT` is empty, because Fly publishes the challenge token only during an active ACME order. An empty
+answer there is the healthy state, not a broken record.
 
 Also note `66.241.124.138` is a **shared** Fly ingress, so Fly routes by SNI. Cloudflare does send
 SNI to the origin, so proxying works — but that is exactly why SSL must be Full (strict) and the
