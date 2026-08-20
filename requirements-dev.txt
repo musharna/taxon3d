@@ -7,3 +7,7 @@ pytest==9.1.1
 httpx==0.28.1
 ruff==0.15.15  # lint + format; pinned because an unpinned formatter rewrites files differently
                # per machine, and `ruff format` is run against this tree by hand
+PyYAML==6.0.3  # test-only: tests/test_export_hf_dataset.py parses the HF dataset card's YAML
+               # front matter for real, so a card that Hugging Face would render as raw text
+               # fails CI instead of failing on the hub. Present transitively today; declared
+               # here because a transitive dependency is not a promise.
