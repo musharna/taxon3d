@@ -8,7 +8,10 @@ predicate is how a mesh we have no right to ship would eventually ship.
 
 from __future__ import annotations
 
+import argparse
+import json
 import shutil
+import sys
 from pathlib import Path
 
 from sqlalchemy import select
@@ -17,6 +20,7 @@ from sqlalchemy.orm import Session
 from app import admissibility
 from app import config
 from app import public_export
+from app.database import SessionLocal
 from app.kingdoms import KINGDOM_OF
 from app.models import (
     Admissibility,
@@ -321,3 +325,72 @@ def copy_meshes(db: Session, inc: IncludeSet, out_dir: Path) -> int:
         shutil.copyfile(src, meshes / f"{oid}.glb")
         written += 1
     return written
+
+
+def _write_jsonl(path: Path, rows: list[dict]) -> None:
+    with path.open("w", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def export_hf(
+    db: Session,
+    *,
+    task_titles: list[str],
+    generator_slugs: list[str],
+    out_dir,
+    dry_run: bool = False,
+) -> dict:
+    """Run the gate chain, build the tables, and write the HF dataset tree to `out_dir`.
+
+    `dry_run=True` runs every gate (so licence/coverage failures still raise) but writes nothing
+    to disk — useful for the pre-publish preflight described in the plan.
+    """
+    inc = resolve_hf_include(db, task_titles=task_titles, generator_slugs=generator_slugs)
+    if not inc.output_ids:
+        raise RuntimeError("include set is empty — refusing to write an empty dataset")
+    tables = build_tables(db, inc)
+    manifest = {
+        "version": 1,
+        "posture": "redistribute",
+        "counts": {k: len(v) for k, v in tables.items()},
+    }
+    if dry_run:
+        manifest["dry_run"] = True
+        return manifest
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    n_meshes = copy_meshes(db, inc, out)
+    for name, rows in tables.items():
+        _write_jsonl(out / f"{name}.jsonl", rows)
+    write_cards(out, tables, n_meshes=n_meshes)
+    manifest["counts"]["meshes"] = n_meshes
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return manifest
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Export the Taxon3D corpus as an HF dataset.")
+    ap.add_argument("--tasks", required=True, help="comma-separated task titles")
+    ap.add_argument("--generators", required=True, help="comma-separated generator slugs")
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--dry-run", action="store_true")
+    a = ap.parse_args()
+    db = SessionLocal()
+    try:
+        manifest = export_hf(
+            db,
+            task_titles=a.tasks.split(","),
+            generator_slugs=a.generators.split(","),
+            out_dir=a.out,
+            dry_run=a.dry_run,
+        )
+    finally:
+        db.close()
+    print(json.dumps(manifest, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

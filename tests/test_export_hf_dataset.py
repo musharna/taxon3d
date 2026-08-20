@@ -305,3 +305,46 @@ def test_card_states_the_licence_and_the_exclusions(db_session, tmp_path):
     transform = (tmp_path / "TRANSFORM.md").read_text()
     assert "mesh_compress" in transform
     assert "texture_downscale" in transform
+
+
+def test_end_to_end_tree_is_clean(db_session, tmp_path, commercial_output):
+    """Real execution against a real DB and a real directory — assert on what landed on disk."""
+    import json
+
+    titles, slugs = _all_titles_and_slugs(db_session)
+    manifest = hf.export_hf(db_session, task_titles=titles, generator_slugs=slugs, out_dir=tmp_path)
+
+    for name in ("outputs", "admissibility", "completeness", "votes", "judge_ratings"):
+        path = tmp_path / f"{name}.jsonl"
+        assert path.exists(), f"{name}.jsonl not written"
+        for line in path.read_text().splitlines():
+            row = json.loads(line)
+            assert "is_gold" not in row and "gold_expected" not in row
+
+    assert (tmp_path / "README.md").exists()
+    assert (tmp_path / "TRANSFORM.md").exists()
+
+    shipped_ids = {
+        json.loads(line)["output_id"]
+        for line in (tmp_path / "outputs.jsonl").read_text().splitlines()
+    }
+    assert commercial_output.id not in shipped_ids
+    for oid in shipped_ids:
+        o = db_session.get(ModelOutput, oid)
+        assert o.is_gold is False
+        assert o.hidden_at is None
+        assert not o.source.startswith(("api:", "recon:", "frontier:"))
+        assert o.license is not None or o.source.startswith("bio3d-arena")
+
+    assert manifest["posture"] == "redistribute"
+    assert manifest["counts"]["outputs"] == len(shipped_ids)
+
+
+def test_dry_run_writes_nothing(db_session, tmp_path):
+    titles, slugs = _all_titles_and_slugs(db_session)
+    manifest = hf.export_hf(
+        db_session, task_titles=titles, generator_slugs=slugs, out_dir=tmp_path, dry_run=True
+    )
+    assert manifest["dry_run"] is True
+    assert not (tmp_path / "outputs.jsonl").exists()
+    assert not (tmp_path / "meshes").exists()
