@@ -13,8 +13,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import select
 
-from app.database import SessionLocal
-from app.models import Admissibility, Generator, ModelOutput, Task
+from app.models import Generator, ModelOutput, Task
 from app.seed import seed_all
 from scripts import export_hf_dataset as hf
 from tests.factories import mark_evaluated
@@ -25,19 +24,18 @@ def setup_module(_module):
 
 
 @pytest.fixture
-def db():
-    with SessionLocal() as s:
-        yield s
-
-
-@pytest.fixture
-def commercial_output(db):
+def commercial_output(db_session):
     """A commercial-API output: present under display, dropped under redistribute.
 
     Without this the positive control cannot fail, because the seed has no commercial sources.
+
+    Uses conftest.py's `db_session` (outer transaction, rolled back on teardown) rather than a
+    committing session: this row and the Admissibility verdicts `mark_evaluated` writes for it
+    never outlive this test, and never leak into other modules (e.g. test_public_export.py's
+    display-posture assertions) sharing the suite's one temp-DB engine.
     """
-    task = db.execute(select(Task)).scalars().first()
-    gen = db.execute(select(Generator)).scalars().first()
+    task = db_session.execute(select(Task)).scalars().first()
+    gen = db_session.execute(select(Generator)).scalars().first()
     o = ModelOutput(
         task_id=task.id,
         generator_id=gen.id,
@@ -46,52 +44,48 @@ def commercial_output(db):
         source="api:fixture-vendor",
         license="proprietary",
     )
-    db.add(o)
-    db.flush()
+    db_session.add(o)
+    db_session.flush()
     # A hand-built fixture has no structural/semantic verdict, unlike a real generated output
     # (ingest.register_output runs the structural evaluator at generation time). Without this,
     # assert_rubric_coverage's "never evaluated" refusal fires on the fixture itself, before the
     # licence gate ever runs, and the test raises UnevaluatedOutputs instead of exercising the
     # posture filter it exists to test.
-    mark_evaluated(db, o)
-    db.commit()
-    yield o
-    # FK enforcement is ON: the Admissibility rows mark_evaluated wrote for this output must go
-    # first, or the DELETE on model_output raises IntegrityError instead of cleaning up.
-    db.query(Admissibility).filter_by(output_id=o.id).delete()
-    db.delete(o)
-    db.commit()
+    mark_evaluated(db_session, o)
+    return o
 
 
-def _all_titles_and_slugs(db):
-    titles = [t.title for t in db.execute(select(Task)).scalars()]
-    slugs = [g.slug for g in db.execute(select(Generator)).scalars()]
+def _all_titles_and_slugs(db_session):
+    titles = [t.title for t in db_session.execute(select(Task)).scalars()]
+    slugs = [g.slug for g in db_session.execute(select(Generator)).scalars()]
     return titles, slugs
 
 
-def test_redistribute_drops_commercial_sources(db, commercial_output):
-    titles, slugs = _all_titles_and_slugs(db)
-    inc = hf.resolve_hf_include(db, task_titles=titles, generator_slugs=slugs)
+def test_redistribute_drops_commercial_sources(db_session, commercial_output):
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
     assert commercial_output.id not in inc.output_ids
     for oid in inc.output_ids:
-        o = db.get(ModelOutput, oid)
+        o = db_session.get(ModelOutput, oid)
         assert not o.source.startswith(("api:", "recon:", "frontier:")), o.source
 
 
-def test_gold_outputs_are_emptied(db):
-    titles, slugs = _all_titles_and_slugs(db)
-    inc = hf.resolve_hf_include(db, task_titles=titles, generator_slugs=slugs)
+def test_gold_outputs_are_emptied(db_session):
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
     assert inc.gold_output_ids == set()
     for oid in inc.output_ids:
-        assert db.get(ModelOutput, oid).is_gold is False
+        assert db_session.get(ModelOutput, oid).is_gold is False
 
 
-def test_display_yields_more_than_redistribute(db, commercial_output):
+def test_display_yields_more_than_redistribute(db_session, commercial_output):
     """THE POSITIVE CONTROL. If these are equal the filter is not running and every other
     assertion in this module is vacuous."""
-    titles, slugs = _all_titles_and_slugs(db)
-    strict = hf.resolve_hf_include(db, task_titles=titles, generator_slugs=slugs)
-    loose = hf.resolve_hf_include(db, task_titles=titles, generator_slugs=slugs, posture="display")
+    titles, slugs = _all_titles_and_slugs(db_session)
+    strict = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    loose = hf.resolve_hf_include(
+        db_session, task_titles=titles, generator_slugs=slugs, posture="display"
+    )
     assert len(loose.output_ids) > len(strict.output_ids), (
         "display and redistribute returned the same set — the posture filter is inert"
     )
