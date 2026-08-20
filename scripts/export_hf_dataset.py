@@ -37,14 +37,42 @@ from app.models import (  # noqa: E402
     Vote,
 )
 from app.public_export import IncludeSet  # noqa: E402
-from app.reference_provenance import (  # noqa: E402
-    assert_recon_photos_cleared,
-    assert_recon_photos_cleared_for_gold,
-)
+from app.reference_provenance import assert_recon_photos_cleared  # noqa: E402
 
 
 def _iso(value):
     return value.isoformat() if value is not None else None
+
+
+def _drop_hidden(db: Session, inc: IncludeSet) -> None:
+    """Remove every `hidden_at IS NOT NULL` output from `inc`, at EVERY posture, in place.
+
+    THE SITE ENFORCES HIDDEN-NESS AT SERVE TIME; A DOWNLOADABLE DATASET HAS NO SERVE TIME.
+    `/media/o/{id}` (app/main.py) 404s a hidden output on every request, so on the live arena a
+    withdrawal takes effect retroactively. Once a mesh is inside a published tarball there is no
+    request to intercept and no way to take it back — so the withdrawal has to happen HERE, before
+    the bytes are copied.
+
+    None of the shared gates does this: `resolve_include_ids`, `filter_include_for_posture`,
+    `check_licenses`, and the admissibility rubric all ignore `hidden_at` entirely (verified
+    2026-08-20: `grep -c hidden_at` -> 0 in app/public_export.py, app/admissibility.py,
+    app/reference_provenance.py). This is not an oversight in those modules — the site bundle they
+    serve re-checks `hidden_at` per request — it is a gap that only a flat export exposes.
+
+    Outputs land here for two unrelated reasons and both must stay out: automatic withdrawal on
+    accumulated voter flags (app/flags.py) and manual withdrawal for a rights reason
+    (scripts/disposition_rose_soybean.py). Measured against data/study/arena-study.db on
+    2026-08-20: 127 hidden outputs, of which 23 were otherwise redistribute-clear and would have
+    shipped.
+
+    Applied to `gold_output_ids` too. That set is emptied immediately afterwards, but a filter
+    that depends on a later line for its correctness is a filter waiting to be reordered.
+    """
+    hidden = set(
+        db.execute(select(ModelOutput.id).where(ModelOutput.hidden_at.is_not(None))).scalars()
+    )
+    inc.output_ids -= hidden
+    inc.gold_output_ids -= hidden
 
 
 def resolve_hf_include(
@@ -61,27 +89,72 @@ def resolve_hf_include(
     indistinguishable from one that ran perfectly, because the seed corpus contains no
     commercial-source outputs.
 
-    Gold outputs are emptied unconditionally: `ModelOutput.is_gold` marks attention-check decoys
+    Gold outputs are emptied FIRST, not last: `ModelOutput.is_gold` marks attention-check decoys
     and `Comparison.gold_expected` records the answer, so publishing either lets anyone pass the
-    check and collapses `trust = (gold_passed + 1) / (gold_seen + 1)`.
+    check and collapses `trust = (gold_passed + 1) / (gold_seen + 1)`. Dropping them up front
+    means no downstream gate has to be trusted to leave them alone, and no downstream gate can
+    abort the export over an output that was never a candidate — which is why neither
+    `filter_gold_for_posture` nor `assert_recon_photos_cleared_for_gold` is called here. Their
+    only role would be narrowing a set that is already empty; a gold row aliases a non-gold twin's
+    asset (public_export.effective_provenance) and that twin is checked on its own id below.
     """
     inc = public_export.resolve_include_ids(
         db, task_titles=task_titles, generator_slugs=generator_slugs
     )
-    # Refuse BEFORE filtering: the gate treats "never evaluated" as "not admitted", so an unscored
-    # output would otherwise vanish silently and the export would report success on a short corpus.
-    admissibility.assert_rubric_coverage(db, inc.output_ids | inc.gold_output_ids)
+    _drop_hidden(db, inc)
+    inc.gold_output_ids = set()
+
+    # Refuse BEFORE the admissibility filter runs: that gate treats "never evaluated" as "not
+    # admitted", so an unscored output would otherwise vanish silently and the export would report
+    # success on a short corpus. Ask the question only of outputs this posture would actually
+    # ship, though — a missing verdict on a commercial-API output that the redistribute licence
+    # filter drops anyway is not a reason to abort a legitimate export. `eligible` is exactly that
+    # set: the real posture predicate evaluated with an EMPTY gated set, so licence/source/hard-
+    # exclude rules apply and admissibility does not.
+    eligible = IncludeSet(
+        generator_ids=set(inc.generator_ids),
+        task_ids=set(inc.task_ids),
+        output_ids=set(inc.output_ids),
+    )
+    public_export.filter_include_for_posture(db, eligible, posture, set())
+    admissibility.assert_rubric_coverage(db, eligible.output_ids)
+
     gated = admissibility.non_admitted_output_ids(db)
     public_export.filter_include_for_posture(db, inc, posture, gated)
-    public_export.filter_gold_for_posture(db, inc, posture, gated)
     if posture == "redistribute":
         public_export.check_licenses(db, inc.output_ids)
         assert_recon_photos_cleared(db, inc.output_ids)
-        assert_recon_photos_cleared_for_gold(db, inc.gold_output_ids)
-    # Gold never ships from THIS export, at any posture. filter_gold_for_posture narrows the set
-    # for licensing; we drop it entirely for anti-gaming.
-    inc.gold_output_ids = set()
     return inc
+
+
+def _criterion_slug(db: Session, criterion_id: int | None) -> str:
+    """Resolve a criterion id to its slug, or raise.
+
+    ONE None policy for both call sites below. They used to disagree three lines apart — the vote
+    table coerced a dangling reference to `None` while the judge table dereferenced the same kind
+    of lookup unguarded — so the same broken row produced a silent null in one table and an
+    AttributeError in the other. Fail loud is the right half of that pair: `Comparison.criterion_id`
+    and `JudgeRating.criterion_id` are both non-nullable (app/models.py), so a lookup that returns
+    nothing means the criterion row is gone, and "A beat B on ???" is not data a reader can use.
+    """
+    crit = db.get(Criterion, criterion_id) if criterion_id is not None else None
+    if crit is None:
+        raise RuntimeError(
+            f"criterion {criterion_id!r} does not resolve — refusing to emit a row whose"
+            " comparison axis is unknown"
+        )
+    return crit.slug
+
+
+def _category_slug(db: Session, category_id: int | None) -> str | None:
+    """Resolve an optional category id to its slug. Unlike criterion, NULL is meaningful here:
+    `JudgeRating.category_id` is nullable and NULL means the all-kingdoms board."""
+    if category_id is None:
+        return None
+    cat = db.get(Category, category_id)
+    if cat is None:
+        raise RuntimeError(f"category {category_id!r} does not resolve — refusing to emit the row")
+    return cat.slug
 
 
 def build_tables(db: Session, inc: IncludeSet) -> dict[str, list[dict]]:
@@ -154,13 +227,12 @@ def build_tables(db: Session, inc: IncludeSet) -> dict[str, list[dict]]:
     for c, v in rows:
         if c.output_a_id not in oid_set or c.output_b_id not in oid_set:
             continue
-        crit = db.get(Criterion, c.criterion_id)
         votes.append(
             {
                 "output_a_id": c.output_a_id,
                 "output_b_id": c.output_b_id,
                 "winner": v.winner,
-                "criterion": crit.slug if crit else None,
+                "criterion": _criterion_slug(db, c.criterion_id),
                 "created": _iso(v.created),
             }
         )
@@ -172,7 +244,15 @@ def build_tables(db: Session, inc: IncludeSet) -> dict[str, list[dict]]:
     judge = [
         {
             "generator_slug": db.get(Generator, j.generator_id).slug,
-            "criterion": (db.get(Criterion, j.criterion_id).slug if j.criterion_id else None),
+            # `category` completes the row's identity. `uq_judge_rating_scope` is
+            # (generator_id, category_id, criterion_id, view_condition) — omitting the category
+            # was harmless only because every row is NULL today (the all-kingdoms board). The
+            # moment per-kingdom judge boards populate, an export without it emits several rows
+            # sharing a key and disagreeing about bt_score, with nothing in the file saying why.
+            # Emitted as a slug rather than the raw id: no category table ships here, so an id
+            # would be unjoinable. None = the all-kingdoms board.
+            "category": _category_slug(db, j.category_id),
+            "criterion": _criterion_slug(db, j.criterion_id),
             "view_condition": j.view_condition,
             "bt_score": j.bt_score,
             "bt_lower": j.bt_lower,
@@ -352,16 +432,40 @@ def export_hf(
     if not inc.output_ids:
         raise RuntimeError("include set is empty — refusing to write an empty dataset")
     tables = build_tables(db, inc)
+    # A per-item licence histogram, because the card's blanket `license: cc-by-4.0` is a claim
+    # about the collection and NOT about every row in it: REDISTRIBUTABLE_LICENSES also admits
+    # CC-BY-SA-3.0/4.0 and ODbL-1.0, whose share-alike terms are not "narrower than CC-BY" the way
+    # the card's honour-the-per-item-terms note implies. A publisher has to be able to see the
+    # real mix BEFORE upload, not reconstruct it from outputs.jsonl afterwards. `export_public.py`
+    # has always built this; this exporter dropped it.
+    licenses: dict[str, int] = {}
+    for row in tables["outputs"]:
+        key = str(row["license"])
+        licenses[key] = licenses.get(key, 0) + 1
     manifest = {
         "version": 1,
         "posture": "redistribute",
         "counts": {k: len(v) for k, v in tables.items()},
+        "licenses": licenses,
     }
     if dry_run:
         manifest["dry_run"] = True
         return manifest
 
     out = Path(out_dir)
+    # Refuse a non-empty target rather than writing into it. `meshes/<id>.glb` is keyed on output
+    # id, so a stale file from an earlier run is NOT overwritten by this run — it survives beside
+    # tables that no longer mention it and gets uploaded. The dangerous case is concrete: an
+    # earlier `posture="display"` run through resolve_hf_include leaves commercial-API meshes on
+    # disk, and a redistribute run that reuses the directory would publish them under a card that
+    # says commercial outputs are excluded. Refusing beats clearing: deleting a directory the
+    # caller named is not this script's decision to make.
+    if out.exists() and any(out.iterdir()):
+        raise RuntimeError(
+            f"refusing to export into non-empty directory {out} — a stale mesh from an earlier"
+            " run would ship alongside tables that do not describe it. Remove it or pass a fresh"
+            " --out."
+        )
     out.mkdir(parents=True, exist_ok=True)
     n_meshes = copy_meshes(db, inc, out)
     for name, rows in tables.items():

@@ -10,9 +10,14 @@ if the filter is inert.
 
 from __future__ import annotations
 
+import datetime as dt
+import json
+
 import pytest
+import yaml
 from sqlalchemy import select
 
+from app import reference_provenance
 from app.models import Comparison, Criterion, Generator, JudgeRating, ModelOutput, Task, Vote
 from app.seed import seed_all
 from scripts import export_hf_dataset as hf
@@ -51,6 +56,78 @@ def commercial_output(db_session):
     # assert_rubric_coverage's "never evaluated" refusal fires on the fixture itself, before the
     # licence gate ever runs, and the test raises UnevaluatedOutputs instead of exercising the
     # posture filter it exists to test.
+    mark_evaluated(db_session, o)
+    return o
+
+
+@pytest.fixture
+def hidden_output(db_session):
+    """An output that passes EVERY other gate and is withdrawn only by `hidden_at`.
+
+    Constructed to make the hidden filter the sole reason it is absent, because that is the only
+    way the assertion can fail on broken code:
+
+    - `source="bio3d-arena"` -> `public_export.is_own_output` is True, so the redistribute licence
+      filter keeps it even with `license=None`.
+    - `mark_evaluated` -> structural + semantic verdicts exist, so neither `assert_rubric_coverage`
+      nor `non_admitted_output_ids` touches it.
+    - `is_gold=False` (default) -> the gold purge does not reach it.
+    - `asset_path` is copied from a real shipped output, so `copy_meshes` finds bytes on disk. With
+      a fabricated path, deleting the hidden filter would make this test fail with
+      FileNotFoundError from copy_meshes — a green-to-red transition for the wrong reason, which is
+      indistinguishable from a broken fixture.
+
+    `test_end_to_end_tree_is_clean`'s `assert o.hidden_at is None` looked like it covered this and
+    did not: `app/seed.py` never sets `hidden_at` (`grep -c hidden_at app/seed.py` -> 0, verified
+    2026-08-20), so it asserted None over rows that could not have been anything else.
+    """
+    task = db_session.execute(select(Task)).scalars().first()
+    gen = db_session.execute(select(Generator)).scalars().first()
+    donor = (
+        db_session.execute(
+            select(ModelOutput).where(
+                ModelOutput.source == "bio3d-arena", ModelOutput.is_gold.is_(False)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    assert donor is not None, "no bio3d-arena output in the seed to borrow a real asset_path from"
+    o = ModelOutput(
+        task_id=task.id,
+        generator_id=gen.id,
+        title="hidden fixture",
+        asset_path=donor.asset_path,
+        source="bio3d-arena",
+        hidden_at=dt.datetime(2026, 8, 19, 12, 0, 0),
+    )
+    db_session.add(o)
+    db_session.flush()
+    mark_evaluated(db_session, o)
+    return o
+
+
+@pytest.fixture
+def recon_output(db_session):
+    """An internal recon: `source="bio3d-arena"` WITH a recorded `input_image`.
+
+    That combination is exactly what `reference_provenance.assert_recon_photos_cleared` treats as
+    a recon needing its input photo cleared (`is_internal_recon`), and it is otherwise fully
+    shippable — own source, evaluated, not gold, not hidden. So whether it survives
+    `resolve_hf_include` is decided by the photo-clearance gate alone.
+    """
+    task = db_session.execute(select(Task)).scalars().first()
+    gen = db_session.execute(select(Generator)).scalars().first()
+    o = ModelOutput(
+        task_id=task.id,
+        generator_id=gen.id,
+        title="internal recon fixture",
+        asset_path="fixtures/internal-recon.glb",
+        source="bio3d-arena",
+        meta_json=json.dumps({"input_image": "reference/testonly_fixture_ref.jpg"}),
+    )
+    db_session.add(o)
+    db_session.flush()
     mark_evaluated(db_session, o)
     return o
 
@@ -154,6 +231,119 @@ def test_redistribute_drops_commercial_sources(db_session, commercial_output):
         assert not o.source.startswith(("api:", "recon:", "frontier:")), o.source
 
 
+def test_hidden_outputs_never_ship(db_session, tmp_path, hidden_output):
+    """A withdrawn output must not reach the tarball, at any posture.
+
+    The live site enforces this per request — `/media/o/{id}` 404s a hidden output — and a flat
+    download has no request to intercept, so the enforcement point moves to export. Both reasons an
+    output gets hidden are irreversible once published: automatic withdrawal on voter flags
+    (app/flags.py) and manual withdrawal for a rights reason
+    (scripts/disposition_rose_soybean.py).
+    """
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    assert inc.output_ids, "empty include set — the exclusion below would pass vacuously"
+    assert hidden_output.id not in inc.output_ids
+
+    # Hidden-ness is not a posture question. The looser posture must drop it too, otherwise the
+    # filter is riding on the redistribute licence rules rather than on hidden_at.
+    loose = hf.resolve_hf_include(
+        db_session, task_titles=titles, generator_slugs=slugs, posture="display"
+    )
+    assert hidden_output.id not in loose.output_ids
+
+    # ...and on disk, through the real writer, not just in the include set.
+    hf.export_hf(db_session, task_titles=titles, generator_slugs=slugs, out_dir=tmp_path)
+    shipped = {
+        json.loads(line)["output_id"]
+        for line in (tmp_path / "outputs.jsonl").read_text().splitlines()
+    }
+    assert shipped, "no rows in outputs.jsonl"
+    assert hidden_output.id not in shipped
+    assert not (tmp_path / "meshes" / f"{hidden_output.id}.glb").exists()
+
+
+def test_recon_photo_gate_runs_and_raises(db_session, recon_output, monkeypatch):
+    """The reference-photo clearance gate must be REACHED, and must raise rather than drop.
+
+    `cleared_reference_images()` reads sidecars from the gitignored `data/` tree, so this is the
+    gate most likely to fire on a real first export and the one whose failure mode matters most:
+    silently dropping an uncleared recon would ship a short corpus and report success, while
+    raising names the output and the photo.
+
+    Both directions are asserted in one test. The positive control (cleared -> the output is in
+    the include set) is what proves the gate is actually on this code path and that the negative
+    result below is the gate refusing, not the output being filtered out for some unrelated
+    reason.
+    """
+    titles, slugs = _all_titles_and_slugs(db_session)
+    real = reference_provenance.cleared_reference_images()
+    photo = "testonly_fixture_ref.jpg"
+    assert photo not in real
+
+    # Cleared: the gate is reached, passes, and the recon ships.
+    monkeypatch.setattr(reference_provenance, "cleared_reference_images", lambda: real | {photo})
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    assert recon_output.id in inc.output_ids, (
+        "the recon fixture is filtered out before the photo gate — the refusal below would prove"
+        " nothing about this output"
+    )
+
+    # Un-cleared: the same call raises, naming this output. Not a bare Exception — a
+    # ReferenceProvenanceError is the gate refusing; anything else is a different bug wearing the
+    # same green tick.
+    monkeypatch.setattr(reference_provenance, "cleared_reference_images", lambda: real)
+    with pytest.raises(
+        reference_provenance.ReferenceProvenanceError,
+        match=rf"output {recon_output.id}: recon input",
+    ):
+        hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+
+
+def test_rubric_coverage_asks_only_about_outputs_this_posture_ships(db_session):
+    """Coverage is scoped to the posture-eligible set, and that scoping cuts both ways.
+
+    Direction 1 — an unevaluated output that WOULD ship must still abort the export. The gate
+    treats "never evaluated" as "not admitted", so without the refusal it would vanish and the
+    export would report success on a short corpus. Asserted first, because it is what the scoping
+    could plausibly have broken.
+
+    Direction 2 — an unevaluated output the redistribute licence filter drops anyway
+    (`source="api:"`) must NOT abort it. Coverage used to be asked of the raw pre-filter set, so a
+    commercial output nobody had scored could fail an export that was never going to include it.
+
+    Deliberately does not use the `commercial_output` fixture: that one calls `mark_evaluated`, so
+    it cannot exercise direction 2 at all.
+    """
+    from app.admissibility import UnevaluatedOutputs
+
+    titles, slugs = _all_titles_and_slugs(db_session)
+    task = db_session.execute(select(Task)).scalars().first()
+    gen = db_session.execute(select(Generator)).scalars().first()
+
+    def _add(source):
+        o = ModelOutput(
+            task_id=task.id,
+            generator_id=gen.id,
+            title=f"unevaluated {source}",
+            asset_path=f"fixtures/unevaluated-{source.replace(':', '-')}.glb",
+            source=source,
+        )
+        db_session.add(o)
+        db_session.flush()
+        return o
+
+    # Direction 2 first: a commercial output with no verdict at all must be invisible to coverage.
+    _add("api:fixture-vendor")
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    assert inc.output_ids, "include set went empty — coverage would be vacuous either way"
+
+    # Direction 1: an own-source (therefore shipping) output with no verdict must abort.
+    shipping = _add("bio3d-arena")
+    with pytest.raises(UnevaluatedOutputs, match=str(shipping.id)):
+        hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+
+
 def test_gold_outputs_are_emptied(db_session):
     titles, slugs = _all_titles_and_slugs(db_session)
     inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
@@ -247,6 +437,33 @@ def test_judge_ratings_reference_shipped_generators(db_session, judge_rating_row
         assert row["generator_slug"] in shipped_slugs
 
 
+def test_judge_ratings_carry_the_category_scope(db_session, judge_rating_row):
+    """`uq_judge_rating_scope` is (generator_id, category_id, criterion_id, view_condition).
+    Dropping category_id from the export is harmless only while every row is NULL; once
+    per-kingdom judge boards populate, two rows would share a key and disagree about bt_score with
+    nothing in the file to tell them apart. Asserted with a real category-scoped row rather than
+    just checking the key exists, because a hardcoded `"category": None` would pass that."""
+    from app.models import Category
+
+    cat = db_session.execute(select(Category)).scalars().first()
+    assert cat is not None
+    scoped = JudgeRating(
+        generator_id=judge_rating_row.generator_id,
+        category_id=cat.id,
+        criterion_id=judge_rating_row.criterion_id,
+        view_condition=judge_rating_row.view_condition,
+    )
+    db_session.add(scoped)
+    db_session.flush()
+
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    rows = hf.build_tables(db_session, inc)["judge_ratings"]
+    cats = {r["category"] for r in rows}
+    assert cat.slug in cats, f"category-scoped rating lost its scope: {cats}"
+    assert None in cats, "the all-kingdoms row must keep a null category, not be coerced"
+
+
 def test_outputs_carry_licence_and_attribution_fields(db_session):
     titles, slugs = _all_titles_and_slugs(db_session)
     inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
@@ -269,9 +486,11 @@ def test_meshes_are_byte_identical_originals(db_session, tmp_path):
 
     assert written > 0
     for oid in inc.output_ids:
+        # No `if not src.exists(): continue` guard here, deliberately. copy_meshes raises
+        # FileNotFoundError on the first missing source (test_missing_source_mesh_raises), so the
+        # guard could never fire — and if copy_meshes were ever changed to skip instead of raise,
+        # that same guard would silently turn this byte-identity test into a no-op.
         src = Path(config.ASSET_DIR) / db_session.get(ModelOutput, oid).asset_path
-        if not src.exists():
-            continue
         dst = tmp_path / "meshes" / f"{oid}.glb"
         assert dst.exists(), f"missing mesh for output {oid}"
         assert dst.read_bytes() == src.read_bytes(), f"mesh {oid} was modified in transit"
@@ -301,6 +520,23 @@ def test_card_states_the_licence_and_the_exclusions(db_session, tmp_path):
     assert "commercial" in card.lower()
     # Recon inputs are absent by design; say so rather than let it look like an oversight.
     assert "reference photo" in card.lower() or "input photo" in card.lower()
+    # The gold/attention-check exclusion is the one bullet whose disappearance is not merely a
+    # documentation gap: readers who do not know decoy pairs were withheld will read the corpus
+    # as a complete sample of what voters saw. Substring checks on the other two bullets already
+    # existed; this one did not, so it could have been deleted with the suite still green.
+    low = card.lower()
+    assert "attention-check" in low and "gold" in low, "gold-exclusion bullet is gone from the card"
+
+    # Parse the YAML front matter for real. Hugging Face reads this block to set the dataset's
+    # licence and tags; a card whose YAML does not parse renders as a wall of raw text on the hub,
+    # and no substring assertion above would notice, because every substring would still be there.
+    assert card.startswith("---\n")
+    front_matter = card.split("---\n", 2)[1]
+    meta = yaml.safe_load(front_matter)
+    assert isinstance(meta, dict), f"front matter is not a YAML mapping: {meta!r}"
+    assert meta["license"] == "cc-by-4.0"
+    assert "3d" in meta["tags"] and "biology" in meta["tags"]
+    assert meta["task_categories"], "task_categories must not be empty"
 
     transform = (tmp_path / "TRANSFORM.md").read_text()
     assert "mesh_compress" in transform
@@ -309,7 +545,6 @@ def test_card_states_the_licence_and_the_exclusions(db_session, tmp_path):
 
 def test_end_to_end_tree_is_clean(db_session, tmp_path, commercial_output):
     """Real execution against a real DB and a real directory — assert on what landed on disk."""
-    import json
 
     titles, slugs = _all_titles_and_slugs(db_session)
     manifest = hf.export_hf(db_session, task_titles=titles, generator_slugs=slugs, out_dir=tmp_path)
@@ -348,6 +583,45 @@ def test_dry_run_writes_nothing(db_session, tmp_path):
     assert manifest["dry_run"] is True
     assert not (tmp_path / "outputs.jsonl").exists()
     assert not (tmp_path / "meshes").exists()
+
+
+def test_export_refuses_non_empty_out_dir(db_session, tmp_path):
+    """A second run into the same directory must refuse, not merge.
+
+    `meshes/` is keyed on output id, so a stale mesh is not overwritten — it survives beside
+    tables that no longer list it and is uploaded anyway. The concrete danger: `resolve_hf_include`
+    accepts `posture="display"`, so an earlier display-posture run can leave commercial-API meshes
+    in `meshes/`, and a redistribute run reusing the directory would publish them under a card
+    that says commercial outputs are excluded.
+    """
+    stale = tmp_path / "meshes"
+    stale.mkdir()
+    (stale / "999999.glb").write_bytes(b"stale mesh from an earlier run")
+
+    titles, slugs = _all_titles_and_slugs(db_session)
+    with pytest.raises(RuntimeError, match="non-empty directory"):
+        hf.export_hf(db_session, task_titles=titles, generator_slugs=slugs, out_dir=tmp_path)
+
+    # Refuse, don't clean: deleting a directory the caller named is not this script's call.
+    assert (stale / "999999.glb").exists()
+    assert not (tmp_path / "outputs.jsonl").exists()
+
+
+def test_manifest_carries_a_licence_histogram(db_session, tmp_path):
+    """The card declares a blanket `license: cc-by-4.0`, but `REDISTRIBUTABLE_LICENSES` also
+    admits CC-BY-SA and ODbL — share-alike terms that are not narrower than CC-BY. The publisher
+    needs the real per-item mix visible before upload, which is why export_public.py has always
+    written one."""
+    titles, slugs = _all_titles_and_slugs(db_session)
+    manifest = hf.export_hf(db_session, task_titles=titles, generator_slugs=slugs, out_dir=tmp_path)
+    assert "licenses" in manifest
+    hist = manifest["licenses"]
+    assert hist, "licence histogram is empty"
+    assert sum(hist.values()) == manifest["counts"]["outputs"], (
+        "histogram does not account for every shipped output"
+    )
+    on_disk = json.loads((tmp_path / "manifest.json").read_text())
+    assert on_disk["licenses"] == hist
 
 
 def test_export_hf_empty_include_set_raises(db_session, tmp_path):
