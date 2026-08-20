@@ -348,3 +348,21 @@ def test_dry_run_writes_nothing(db_session, tmp_path):
     assert manifest["dry_run"] is True
     assert not (tmp_path / "outputs.jsonl").exists()
     assert not (tmp_path / "meshes").exists()
+
+
+def test_export_hf_empty_include_set_raises(db_session, tmp_path):
+    """A zero-output export must never report success — that's the exact failure this whole
+    gate chain exists to prevent (see module docstring / task brief). Driven through the real
+    gate chain with task/generator names that match nothing in the seeded DB, not a monkeypatched
+    IncludeSet, so a break upstream in resolve_hf_include's own filtering would also be caught
+    here rather than only by this guard.
+    """
+    out = tmp_path / "should-not-be-created"
+    with pytest.raises(RuntimeError, match="include set is empty"):
+        hf.export_hf(
+            db_session,
+            task_titles=["nonexistent-task-title-zzz"],
+            generator_slugs=["nonexistent-generator-slug-zzz"],
+            out_dir=out,
+        )
+    assert not out.exists(), "raise happened after disk writes started"
