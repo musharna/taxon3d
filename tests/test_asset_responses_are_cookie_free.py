@@ -56,9 +56,7 @@ def output_id() -> int:
 
 
 def _sets_session(resp) -> bool:
-    return any(
-        SESSION_COOKIE in v for k, v in resp.headers.items() if k.lower() == "set-cookie"
-    )
+    return any(SESSION_COOKIE in v for k, v in resp.headers.items() if k.lower() == "set-cookie")
 
 
 def test_a_mesh_does_not_mint_a_session(visitor, output_id):
