@@ -89,3 +89,67 @@ def test_display_yields_more_than_redistribute(db_session, commercial_output):
     assert len(loose.output_ids) > len(strict.output_ids), (
         "display and redistribute returned the same set — the posture filter is inert"
     )
+
+
+FORBIDDEN_KEYS = {"is_gold", "gold_expected"}
+
+
+def test_no_table_leaks_gold_columns(db_session):
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    tables = hf.build_tables(db_session, inc)
+    assert set(tables) == {
+        "outputs",
+        "admissibility",
+        "completeness",
+        "votes",
+        "judge_ratings",
+    }
+    for name, rows in tables.items():
+        for row in rows:
+            leaked = FORBIDDEN_KEYS & set(row)
+            assert not leaked, f"{name} row leaked {leaked}"
+
+
+def test_votes_exclude_gold_comparisons(db_session):
+    from app.models import Comparison
+
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    votes = hf.build_tables(db_session, inc)["votes"]
+    gold_pairs = {
+        (c.output_a_id, c.output_b_id)
+        for c in db_session.execute(
+            select(Comparison).where(Comparison.is_gold.is_(True))
+        ).scalars()
+    }
+    for row in votes:
+        assert (row["output_a_id"], row["output_b_id"]) not in gold_pairs
+
+
+def test_every_vote_row_references_shipped_outputs(db_session):
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    tables = hf.build_tables(db_session, inc)
+    shipped = {r["output_id"] for r in tables["outputs"]}
+    for row in tables["votes"]:
+        assert row["output_a_id"] in shipped
+        assert row["output_b_id"] in shipped
+
+
+def test_admissibility_rows_reference_shipped_outputs(db_session):
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    tables = hf.build_tables(db_session, inc)
+    shipped = {r["output_id"] for r in tables["outputs"]}
+    assert tables["admissibility"], "no admissibility rows — the headline table is empty"
+    for row in tables["admissibility"]:
+        assert row["output_id"] in shipped
+
+
+def test_outputs_carry_licence_and_attribution_fields(db_session):
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    for row in hf.build_tables(db_session, inc)["outputs"]:
+        assert "license" in row and "attribution" in row
+        assert row["mesh_path"] == f"meshes/{row['output_id']}.glb"
