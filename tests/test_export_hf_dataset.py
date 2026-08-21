@@ -263,6 +263,65 @@ def test_hidden_outputs_never_ship(db_session, tmp_path, hidden_output):
     assert not (tmp_path / "meshes" / f"{hidden_output.id}.glb").exists()
 
 
+def test_withdrawn_bytes_never_ship_under_a_twins_id(db_session, tmp_path, hidden_output):
+    """A withdrawn mesh must not ship under a DIFFERENT output's id.
+
+    Two `ModelOutput` rows may point at one `asset_path` — by design for gold decoys
+    (`public_export.effective_provenance` exists for exactly that), and in practice outside that
+    case too: on data/study/arena-study.db, row 322 is hidden while row 100 is visible and both
+    name `uploads/6a22a1f2eddb43ff837582abcf5c436d.glb` (verified 2026-08-20).
+
+    Keying the withdrawal on the ROW is correct for the live site and wrong here. `/media/o/322`
+    404s while `/media/o/100` keeps serving the same bytes, and that is fine because hiding is a
+    per-publication act that can be undone. `copy_meshes` copies `root / o.asset_path`, so an
+    export writes those same bytes as `meshes/100.glb` — and a published tarball cannot be undone.
+
+    The decisive fact is that `hidden_at` records no reason (app/models.py:121-123 is a bare
+    nullable timestamp). It is written by voter-flag withdrawal (app/flags.py:55-56) and by
+    licensing withdrawal (scripts/disposition_rose_soybean.py:73-77) alike, so the export cannot
+    tell "this render is bad" from "we may not distribute these bytes". Under that ambiguity the
+    costs are asymmetric: over-filtering loses one row of corpus, under-filtering is an
+    unretractable distribution. So the asset is withdrawn if ANY row claiming it is hidden.
+
+    The `hidden_output` fixture borrows `donor.asset_path` from a real shipped output, which is
+    what makes the aliasing real rather than staged.
+    """
+    donor = (
+        db_session.execute(
+            select(ModelOutput).where(
+                ModelOutput.asset_path == hidden_output.asset_path,
+                ModelOutput.id != hidden_output.id,
+                ModelOutput.hidden_at.is_(None),
+            )
+        )
+        .scalars()
+        .first()
+    )
+    assert donor is not None, "fixture no longer aliases a visible output — the test is vacuous"
+
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+
+    # POSITIVE CONTROL, in the same run: the export still ships outputs whose asset nobody
+    # withdrew. Without it, a filter that dropped everything would satisfy the assertion below.
+    survivors = inc.output_ids - {donor.id, hidden_output.id}
+    assert survivors, "nothing survived — a broken gate chain would pass the exclusion vacuously"
+
+    assert donor.id not in inc.output_ids, (
+        f"output {donor.id} ships bytes withdrawn as output {hidden_output.id}"
+        f" ({hidden_output.asset_path})"
+    )
+
+    hf.export_hf(db_session, task_titles=titles, generator_slugs=slugs, out_dir=tmp_path)
+    assert not (tmp_path / "meshes" / f"{donor.id}.glb").exists()
+    shipped = {
+        json.loads(line)["output_id"]
+        for line in (tmp_path / "outputs.jsonl").read_text().splitlines()
+    }
+    assert donor.id not in shipped
+    assert shipped, "no rows in outputs.jsonl"
+
+
 def test_recon_photo_gate_runs_and_raises(db_session, recon_output, monkeypatch):
     """The reference-photo clearance gate must be REACHED, and must raise rather than drop.
 
