@@ -45,7 +45,11 @@ def _iso(value):
 
 
 def _drop_hidden(db: Session, inc: IncludeSet) -> None:
-    """Remove every `hidden_at IS NOT NULL` output from `inc`, at EVERY posture, in place.
+    """Remove every output whose MESH was withdrawn, at EVERY posture, in place.
+
+    Keyed on `asset_path`, not on `id`: an output is dropped if ANY row pointing at its mesh is
+    hidden, including a row that is not itself shipping. See the asset-vs-row note at the bottom
+    of this docstring for why the row key was wrong.
 
     THE SITE ENFORCES HIDDEN-NESS AT SERVE TIME; A DOWNLOADABLE DATASET HAS NO SERVE TIME.
     `/media/o/{id}` (app/main.py) 404s a hidden output on every request, so on the live arena a
@@ -67,12 +71,40 @@ def _drop_hidden(db: Session, inc: IncludeSet) -> None:
 
     Applied to `gold_output_ids` too. That set is emptied immediately afterwards, but a filter
     that depends on a later line for its correctness is a filter waiting to be reordered.
+
+    WHY THE ASSET AND NOT THE ROW. Two `ModelOutput` rows may name one `asset_path` — by design
+    for gold decoys (`public_export.effective_provenance` exists for exactly that aliasing), and
+    in practice outside that case too. Measured on data/study/arena-study.db 2026-08-20: two
+    hidden rows alias a visible one, and 322/100 is not a gold pair. Keying on `id` is right for
+    the live site, where `/media/o/322` 404s while `/media/o/100` keeps serving the same bytes —
+    correct, because hiding is a per-publication act and an un-hide restores it. `copy_meshes`
+    copies `root / o.asset_path`, so a row-keyed export writes those withdrawn bytes as
+    `meshes/100.glb`, and a published tarball has no un-publish.
+
+    The reason we cannot be more precise is that `hidden_at` records no reason: it is a bare
+    nullable timestamp (app/models.py) written both by voter-flag withdrawal (app/flags.py) and
+    by licensing withdrawal (scripts/disposition_rose_soybean.py). Nothing in the schema separates
+    "this render is bad" from "we may not distribute these bytes". Under that ambiguity the costs
+    are asymmetric — over-filtering loses one row of corpus, under-filtering is an unretractable
+    distribution — so the conservative reading wins. If a `hidden_reason` column is ever added,
+    this is the call site that should narrow to rights-based withdrawals only.
     """
-    hidden = set(
-        db.execute(select(ModelOutput.id).where(ModelOutput.hidden_at.is_not(None))).scalars()
+    hidden_assets = set(
+        db.execute(
+            select(ModelOutput.asset_path).where(ModelOutput.hidden_at.is_not(None))
+        ).scalars()
     )
-    inc.output_ids -= hidden
-    inc.gold_output_ids -= hidden
+    if not hidden_assets:
+        return
+    # `asset_path` is non-nullable (app/models.py), so no NULL can enter this set and silently
+    # never match — `IN` would drop a NULL comparison rather than raise.
+    withdrawn = set(
+        db.execute(
+            select(ModelOutput.id).where(ModelOutput.asset_path.in_(hidden_assets))
+        ).scalars()
+    )
+    inc.output_ids -= withdrawn
+    inc.gold_output_ids -= withdrawn
 
 
 def resolve_hf_include(
