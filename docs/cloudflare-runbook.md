@@ -76,7 +76,11 @@ Verify: `curl -s https://taxon3d.org/ | grep -c cloudflareinsights` → `1`.
 > **DONE 2026-08-20 — taxon3d.org is live behind the proxy and meshes `HIT` at the edge.** Kept as
 > the record of how, and of the two faults that made a correct-looking setup cache nothing: assets
 > minted a session cookie, and the Cache Rule was unnamed so it was never deployed. Both are written
-> up below. Still open: HTML is uncached, because Cloudflare does not cache `text/html` by default.
+> up below.
+>
+> **HTML caching CLOSED 2026-08-21** by a second Cache Rule — see "Steps C". Public pages now
+> `HIT`. That verification also turned up a zone-wide `max-age` rewrite that had been in place all
+> along; it is written up at the end of Steps C.
 
 **Two prerequisites are non-obvious and each fails SILENTLY. Do not skip them.**
 
@@ -269,6 +273,72 @@ Taken 2026-08-17, direct to Fly with no edge cache:
 TTFB on a mesh is ~3x the whole HTML page because `media_asset` reads the entire object from R2
 into memory and hashes it before emitting a byte. A cache HIT should collapse that toward the
 HTML figure. If it does not, the rule is not matching.
+
+## Steps C — edge-cache public HTML (DONE 2026-08-21)
+
+HTML is the burst surface: one visitor arriving costs a page render, and the origin is a single Fly
+machine that cannot scale out, with a measured knee at 15–30 concurrent requests. Meshes were
+already cached by Steps B; the page itself was not, because Cloudflare never caches `text/html` by
+default.
+
+**Do not mirror the page list into Cloudflare.** `app/main.py` sets `Cache-Control` on exactly the
+`_CACHEABLE_PATHS` / `_CACHEABLE_PREFIXES` set, and on nothing else — not `?kingdom=` requests, not
+non-200s, not `/arena`. Duplicating that list into a dashboard rule creates a second source of
+truth that silently drifts the next time a public page is added. Make HTML _eligible_ and let the
+edge obey the origin's header instead.
+
+The rule, as deployed:
+
+- **Name it.** An unnamed rule is never deployed (see the section above).
+- Expression:
+
+      (http.host in {"taxon3d.org" "www.taxon3d.org"})
+      and not starts_with(http.request.uri.path, "/api")
+      and not starts_with(http.request.uri.path, "/admin")
+      and not starts_with(http.request.uri.path, "/auth")
+      and not starts_with(http.request.uri.path, "/arena")
+
+- _Cache eligibility_ → **Eligible for cache**
+- _Edge TTL_ → **Use cache-control header from origin** (bypass when absent)
+
+The four exclusions are belt-and-braces — those routes send no `Cache-Control` and do set a session
+cookie, so they would bypass anyway — but `/admin` should not depend on that.
+
+Verified 2026-08-21, second pass warm:
+
+| path                                                          | status         | `Set-Cookie` |
+| ------------------------------------------------------------- | -------------- | ------------ |
+| `/`, `/leaderboard`, `/models`, `/robots.txt`, `/sitemap.xml` | `MISS` → `HIT` | 0            |
+| `/?kingdom=plants`                                            | `BYPASS`       | 2            |
+| `/admin`                                                      | `DYNAMIC`      | 1            |
+
+TTFB on a warm HTML `HIT` is ~0.14–0.20 s against ~0.21–0.39 s cold. **The row that matters is the
+bottom two**: personalized and admin responses still carry their cookies and are still not cached.
+Probe those with `/?kingdom=` and `/admin` — never by curling `/arena` or `/api/next`, which write
+a `comparison` row on production.
+
+### Cloudflare rewrites `max-age` zone-wide — found while verifying, NOT caused by this rule
+
+The edge serves `max-age=14400` (4 h) on every response regardless of what the origin said:
+
+| path             | origin sends              | edge sends                    |
+| ---------------- | ------------------------- | ----------------------------- |
+| `/leaderboard`   | `max-age=0, s-maxage=300` | `max-age=14400, s-maxage=300` |
+| `/media/o/*.glb` | `public, max-age=3600`    | `public, max-age=14400`       |
+| `/static/*`      | _(no header)_             | `max-age=14400`               |
+
+14400 s is exactly Cloudflare's default **Browser Cache TTL**, and it was already rewriting meshes
+before Steps C — the HTML rule only made it visible. `s-maxage` is untouched, so **edge** behaviour
+is exactly as designed; only the **browser** directive is overridden.
+
+Consequence: `_PUBLIC_CACHE` sets `max-age=0` deliberately so a voter watching a board always
+revalidates (`app/main.py`), and that intent is not holding — a returning voter can see a board up
+to 4 h stale in their own browser. Static assets are unaffected because `_asset_url` appends
+`?v=<mtime>`, so a deploy changes the URL.
+
+Fix, if we want the origin's intent honoured: **Caching → Configuration → Browser Cache TTL →
+"Respect Existing Headers"**. Left as-is for now — it costs board freshness for returning voters
+and buys nothing we asked for. Not urgent while traffic is near zero; revisit before a vote push.
 
 ## What this does NOT fix
 
