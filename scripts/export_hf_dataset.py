@@ -40,6 +40,19 @@ from app.public_export import IncludeSet  # noqa: E402
 from app.reference_provenance import assert_recon_photos_cleared  # noqa: E402
 
 
+#: Histogram key for outputs we generated ourselves, which carry `license=None`.
+#:
+#: `str(None)` would write `"None"` into a manifest that ships inside the uploaded tree, where it
+#: reads as a row whose licence nobody bothered to record — the opposite of the truth. A null
+#: licence here means no third-party licence EXISTS, because we made the mesh, so the collection's
+#: CC-BY-4.0 is the whole story.
+#:
+#: Safe to state that flatly only because the gate runs first: `normalize_license(None)` is None
+#: (app/licensing.py), None is not in `REDISTRIBUTABLE_LICENSES`, so `check_licenses` raises on
+#: any NON-own output with a null licence rather than letting it reach this histogram.
+OWN_OUTPUT_LICENSE_KEY = "own-output (no third-party licence)"
+
+
 def _iso(value):
     return value.isoformat() if value is not None else None
 
@@ -472,7 +485,7 @@ def export_hf(
     # has always built this; this exporter dropped it.
     licenses: dict[str, int] = {}
     for row in tables["outputs"]:
-        key = str(row["license"])
+        key = OWN_OUTPUT_LICENSE_KEY if row["license"] is None else row["license"]
         licenses[key] = licenses.get(key, 0) + 1
     manifest = {
         "version": 1,
@@ -485,6 +498,15 @@ def export_hf(
         return manifest
 
     out = Path(out_dir)
+    # A path that exists but is not a directory has to be caught HERE. `any(out.iterdir())` below
+    # raises NotADirectoryError from the stdlib before the intended message is ever built, so an
+    # operator who typo'd `--out` gets a traceback that says nothing about what this script wanted
+    # — on the one script whose entire job is refusing to publish the wrong bytes.
+    if out.exists() and not out.is_dir():
+        raise RuntimeError(
+            f"refusing to export to {out} — it exists and is not a directory. Pass a --out that"
+            " names a directory, or a path that does not exist yet."
+        )
     # Refuse a non-empty target rather than writing into it. `meshes/<id>.glb` is keyed on output
     # id, so a stale file from an earlier run is NOT overwritten by this run — it survives beside
     # tables that no longer mention it and gets uploaded. The dangerous case is concrete: an

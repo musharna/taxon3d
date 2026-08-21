@@ -683,6 +683,57 @@ def test_manifest_carries_a_licence_histogram(db_session, tmp_path):
     assert on_disk["licenses"] == hist
 
 
+def test_manifest_names_own_outputs_rather_than_stringifying_none(db_session, tmp_path):
+    """Our own outputs carry `license=None`, and `str(None)` would put the key `"None"` in a
+    published manifest.
+
+    `manifest.json` is written into the uploaded tree, so this is reader-facing, and `"None"`
+    reads as a data defect — a row whose licence nobody recorded — when it means the opposite: we
+    made the mesh, so no third-party licence exists and the collection's CC-BY-4.0 governs it.
+
+    The mapping is sound only because the gate already ran: `normalize_license(None)` returns None
+    (app/licensing.py) and None is not in `REDISTRIBUTABLE_LICENSES`, so `check_licenses` raises
+    for any NON-own output with a null licence. By the time the histogram is built, a null licence
+    therefore implies `is_own_output`. The positive control below is what keeps this honest — if
+    the seed ever ships a real third-party licence, the key must still appear verbatim.
+    """
+    titles, slugs = _all_titles_and_slugs(db_session)
+    manifest = hf.export_hf(db_session, task_titles=titles, generator_slugs=slugs, out_dir=tmp_path)
+    hist = manifest["licenses"]
+
+    assert "None" not in hist, f"stringified None leaked into the manifest: {hist}"
+
+    rows = [json.loads(line) for line in (tmp_path / "outputs.jsonl").read_text().splitlines()]
+    n_own = sum(1 for r in rows if r["license"] is None)
+    assert n_own, "no own-source output in the seed — this assertion would pass vacuously"
+    assert hist.get(hf.OWN_OUTPUT_LICENSE_KEY) == n_own
+
+    # POSITIVE CONTROL: real licences still appear under their own verbatim key, so the fix
+    # cannot be "relabel everything".
+    for r in rows:
+        if r["license"] is not None:
+            assert r["license"] in hist, f"licence {r['license']!r} lost from the histogram"
+
+
+def test_export_refuses_when_out_path_is_a_file(db_session, tmp_path):
+    """`--out` naming an existing FILE must hit the script's own refusal, not NotADirectoryError.
+
+    The guard reads `out.exists() and any(out.iterdir())`, and `iterdir()` on a file raises
+    NotADirectoryError from the stdlib before the intended message is ever built. An operator who
+    typo'd a path then gets a traceback that says nothing about what the script wanted, on a
+    script whose whole job is refusing to publish the wrong bytes.
+    """
+    target = tmp_path / "typo.glb"
+    target.write_bytes(b"an existing file where a directory was meant")
+
+    titles, slugs = _all_titles_and_slugs(db_session)
+    with pytest.raises(RuntimeError, match="not a directory"):
+        hf.export_hf(db_session, task_titles=titles, generator_slugs=slugs, out_dir=target)
+
+    # Refuse, don't clobber — same posture as the non-empty-directory guard.
+    assert target.read_bytes() == b"an existing file where a directory was meant"
+
+
 def test_export_hf_empty_include_set_raises(db_session, tmp_path):
     """A zero-output export must never report success — that's the exact failure this whole
     gate chain exists to prevent (see module docstring / task brief). Driven through the real
