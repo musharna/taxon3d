@@ -750,3 +750,76 @@ def test_export_hf_empty_include_set_raises(db_session, tmp_path):
             out_dir=out,
         )
     assert not out.exists(), "raise happened after disk writes started"
+
+
+def test_card_quantifies_what_was_withheld(db_session, tmp_path):
+    """The card must say HOW MANY outputs were withheld and why, not just that some were.
+
+    `test_card_states_the_licence_and_the_exclusions` asserts the exclusion bullets exist, but
+    every one of its substring checks passes on the vague prose those bullets used to carry ("a
+    large part of the live arena"). A reader cannot tell from that whether the corpus is 95% of
+    the arena or 5% of it — on the real corpus it is 55%, and the withheld majority is the whole
+    reason the vote table is own-vs-own. So the counts are the claim, and they are asserted here.
+
+    The counts must be COMPUTED, never written into the template — the same rule `write_cards`
+    already states for the contents table. A hardcoded number is a lie that survives every future
+    export, and it is exactly what a substring assertion cannot catch. The control below is what
+    makes this test able to fail on a hardcoded card: the SAME assertions run against two corpora
+    that differ by one restricted-licence output, and the reported withheld count must move.
+    """
+    titles, slugs = _all_titles_and_slugs(db_session)
+
+    def card_for():
+        acct = hf.ExportAccounting()
+        inc = hf.resolve_hf_include(
+            db_session, task_titles=titles, generator_slugs=slugs, accounting=acct
+        )
+        tables = hf.build_tables(db_session, inc)
+        out = tmp_path / f"card-{acct.restricted_license}-{acct.shipped}"
+        hf.write_cards(out, tables, n_meshes=len(tables["outputs"]), accounting=acct)
+        return (out / "README.md").read_text(), acct
+
+    before_card, before = card_for()
+
+    # Every candidate is accounted for: nothing vanishes without a stated reason. This is the
+    # property that makes the published numbers checkable by a reader rather than merely present.
+    assert before.candidates == (
+        before.shipped
+        + before.withdrawn
+        + before.gold
+        + before.restricted_license
+        + before.not_admitted
+    ), f"drop reasons do not reconcile with the candidate pool: {before}"
+
+    assert str(before.shipped) in before_card, "card does not state how many outputs ship"
+    assert str(before.candidates) in before_card, "card does not state the candidate total"
+
+    # POSITIVE CONTROL, same run: the legitimate path is intact — outputs really did ship, so a
+    # card reporting "0 of 0 withheld" cannot pass this test by having nothing to withhold.
+    assert before.shipped > 0, "no outputs shipped; the withheld counts prove nothing"
+
+    # NEGATIVE CONTROL: add one restricted-licence output and the card's number MUST move. A
+    # template with the count baked in passes every assertion above and fails right here.
+    task = db_session.execute(select(Task)).scalars().first()
+    gen = db_session.execute(select(Generator)).scalars().first()
+    extra = ModelOutput(
+        task_id=task.id,
+        generator_id=gen.id,
+        title="second commercial fixture",
+        asset_path="fixtures/commercial-2.glb",
+        source="api:fixture-vendor",
+        license="proprietary",
+    )
+    db_session.add(extra)
+    db_session.flush()
+    mark_evaluated(db_session, extra)
+
+    after_card, after = card_for()
+    assert after.restricted_license == before.restricted_license + 1, (
+        "adding a restricted-licence output did not change the withheld count — "
+        "the accounting is not reading the real gate"
+    )
+    assert str(after.restricted_license) in after_card, (
+        "the withheld count in the card is hardcoded: the corpus changed and the card did not"
+    )
+    assert after_card != before_card, "card text is identical across two different corpora"

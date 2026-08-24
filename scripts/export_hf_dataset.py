@@ -12,6 +12,7 @@ import argparse
 import json
 import shutil
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -51,6 +52,43 @@ from app.reference_provenance import assert_recon_photos_cleared  # noqa: E402
 #: (app/licensing.py), None is not in `REDISTRIBUTABLE_LICENSES`, so `check_licenses` raises on
 #: any NON-own output with a null licence rather than letting it reach this histogram.
 OWN_OUTPUT_LICENSE_KEY = "own-output (no third-party licence)"
+
+
+@dataclass
+class ExportAccounting:
+    """Why each candidate output did or did not ship, counted at the gate that decided it.
+
+    The card publishes these numbers, so they are measured at the moment of the drop rather than
+    re-derived afterwards: a second implementation of "which outputs are commercial" would be free
+    to disagree with the filter that actually ran, and the card would report the disagreement as
+    fact. Every field below is a difference in set size across one gate in `resolve_hf_include`.
+
+    `candidates == shipped + withdrawn + gold + restricted_license + not_admitted` is an invariant,
+    not a coincidence: the gates partition the pool, and an unaccounted-for drop is a bug worth
+    failing on rather than papering over with an "other" bucket.
+    """
+
+    candidates: int = 0
+    shipped: int = 0
+    withdrawn: int = 0
+    gold: int = 0
+    restricted_license: int = 0
+    not_admitted: int = 0
+
+    def check(self) -> None:
+        """Raise if the reasons do not sum to the pool.
+
+        Fail loud: a card that under-counts its own exclusions is precisely the "distributes bytes
+        while describing something else" failure this export exists to prevent.
+        """
+        total = (
+            self.shipped + self.withdrawn + self.gold + self.restricted_license + self.not_admitted
+        )
+        if total != self.candidates:
+            raise RuntimeError(
+                f"export accounting does not reconcile: {self.candidates} candidates but "
+                f"{total} accounted for ({self!r}). Refusing to publish counts that do not add up."
+            )
 
 
 def _iso(value):
@@ -126,8 +164,13 @@ def resolve_hf_include(
     task_titles: list[str],
     generator_slugs: list[str],
     posture: str = "redistribute",
+    accounting: ExportAccounting | None = None,
 ) -> IncludeSet:
     """Run the full export gate chain and return the cleared include set.
+
+    Pass an `ExportAccounting` to have each gate record how many outputs it dropped and why; the
+    dataset card publishes those counts. It is an out-parameter rather than a second return value
+    so existing callers and tests keep working unchanged.
 
     `posture` exists so the test suite can run this identical path at "display" and assert it
     yields strictly more outputs. Without that control, a filter that never ran is
@@ -143,10 +186,25 @@ def resolve_hf_include(
     only role would be narrowing a set that is already empty; a gold row aliases a non-gold twin's
     asset (public_export.effective_provenance) and that twin is checked on its own id below.
     """
+    acct = accounting if accounting is not None else ExportAccounting()
+
     inc = public_export.resolve_include_ids(
         db, task_titles=task_titles, generator_slugs=generator_slugs
     )
+    # The candidate pool is measured HERE, before any HF gate narrows it, because this is the only
+    # point at which "what we could have shipped" is still knowable. Gold ids are counted into it
+    # explicitly: they are candidates that a gate removes, and folding them in silently would make
+    # the reasons fail to sum to the pool.
+    acct.candidates = len(inc.output_ids | inc.gold_output_ids)
+
+    # Measured across BOTH sets, because `_drop_hidden` withdraws from the gold set as well. Count
+    # only `output_ids` here and a withdrawn GOLD output lands in no bucket at all: it is gone
+    # before the gold purge can count it, and `check()` then fails a legitimate export.
+    before_hidden = len(inc.output_ids | inc.gold_output_ids)
     _drop_hidden(db, inc)
+    acct.withdrawn = before_hidden - len(inc.output_ids | inc.gold_output_ids)
+
+    acct.gold = len(inc.gold_output_ids)
     inc.gold_output_ids = set()
 
     # Refuse BEFORE the admissibility filter runs: that gate treats "never evaluated" as "not
@@ -161,11 +219,21 @@ def resolve_hf_include(
         task_ids=set(inc.task_ids),
         output_ids=set(inc.output_ids),
     )
+    before_license = len(inc.output_ids)
     public_export.filter_include_for_posture(db, eligible, posture, set())
     admissibility.assert_rubric_coverage(db, eligible.output_ids)
+    # `eligible` is the pool with licence/source rules applied and admissibility NOT applied, so
+    # the two drop reasons separate cleanly here. Reporting the combined drop as "commercial
+    # terms" would attribute admissibility failures to licensing — a claim about other people's
+    # terms of service that we would have no basis for.
+    acct.restricted_license = before_license - len(eligible.output_ids)
 
     gated = admissibility.non_admitted_output_ids(db)
     public_export.filter_include_for_posture(db, inc, posture, gated)
+    acct.not_admitted = len(eligible.output_ids) - len(inc.output_ids)
+    acct.shipped = len(inc.output_ids)
+    acct.check()
+
     if posture == "redistribute":
         public_export.check_licenses(db, inc.output_ids)
         assert_recon_photos_cleared(db, inc.output_ids)
@@ -365,9 +433,12 @@ Live arena: https://taxon3d.org
 
 ## What is NOT here, and why
 
-- **Commercial-API outputs.** A large part of the live arena is generated by commercial services
-  whose terms permit display but not redistribution. Those outputs are excluded here. **This corpus
-  is therefore not the whole arena**, and per-generator counts are not a sample of it.
+{withheld_summary}
+
+- **Commercial-API outputs.** Much of the live arena is generated by commercial services whose
+  terms permit display but not redistribution, so those outputs are excluded here. **This corpus is
+  therefore not the whole arena**, and per-generator counts are not a sample of it. Because the
+  withheld majority is commercial, every published vote is between two of our own outputs.
 - **Reference / input photos.** Recon outputs are reconstructed from photographs. The photos are
   not redistributed here, so recon rows are not end-to-end reproducible from this dataset alone.
 - **Attention-check assets.** The arena uses gold decoy pairs to detect inattentive voters.
@@ -410,11 +481,45 @@ The `votes.jsonl` rows refer to the derived meshes. The `admissibility.jsonl` an
 """
 
 
-def write_cards(out_dir: Path, tables: dict[str, list[dict]], n_meshes: int) -> None:
+def _withheld_summary(acct: ExportAccounting | None) -> str:
+    """Render the accounting as the card's lead sentence on scale.
+
+    Written as prose with the numbers inline rather than a table, because the number that matters
+    is the RATIO — a reader who sees only "292 outputs" has no way to tell whether that is most of
+    the arena or half of it. Each reason is named only when it actually removed something, so the
+    card never claims an exclusion it did not make.
+    """
+    if acct is None:
+        return ""
+    reasons = [
+        (
+            acct.restricted_license,
+            "under commercial-API terms that permit display but not redistribution",
+        ),
+        (acct.withdrawn, "withdrawn from publication"),
+        (acct.gold, "attention-check decoys"),
+        (acct.not_admitted, "not admitted by the rubric"),
+    ]
+    named = [f"{n} {label}" for n, label in reasons if n]
+    if not named:
+        return f"**All {acct.candidates} candidate outputs ship.** Nothing was withheld."
+    withheld = acct.candidates - acct.shipped
+    return (
+        f"**{acct.shipped} of {acct.candidates} candidate outputs ship here; {withheld} are "
+        f"withheld** — " + "; ".join(named) + "."
+    )
+
+
+def write_cards(
+    out_dir: Path,
+    tables: dict[str, list[dict]],
+    n_meshes: int,
+    accounting: ExportAccounting | None = None,
+) -> None:
     """Write the public-facing README.md dataset card and TRANSFORM.md into out_dir.
 
-    Counts are read from `tables`/`n_meshes`, never hardcoded — a stale hardcoded count would be
-    a lie that survives every future export.
+    Counts are read from `tables`/`n_meshes`/`accounting`, never hardcoded — a stale hardcoded
+    count would be a lie that survives every future export.
     """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -426,6 +531,7 @@ def write_cards(out_dir: Path, tables: dict[str, list[dict]], n_meshes: int) -> 
             n_completeness=len(tables["completeness"]),
             n_votes=len(tables["votes"]),
             n_judge_ratings=len(tables["judge_ratings"]),
+            withheld_summary=_withheld_summary(accounting),
         ),
         encoding="utf-8",
     )
@@ -473,7 +579,10 @@ def export_hf(
     `dry_run=True` runs every gate (so licence/coverage failures still raise) but writes nothing
     to disk — useful for the pre-publish preflight described in the plan.
     """
-    inc = resolve_hf_include(db, task_titles=task_titles, generator_slugs=generator_slugs)
+    acct = ExportAccounting()
+    inc = resolve_hf_include(
+        db, task_titles=task_titles, generator_slugs=generator_slugs, accounting=acct
+    )
     if not inc.output_ids:
         raise RuntimeError("include set is empty — refusing to write an empty dataset")
     tables = build_tables(db, inc)
@@ -492,6 +601,16 @@ def export_hf(
         "posture": "redistribute",
         "counts": {k: len(v) for k, v in tables.items()},
         "licenses": licenses,
+        # The publisher's own view of the same numbers the card states, so a pre-upload check can
+        # compare them against the live DB without re-parsing prose.
+        "accounting": {
+            "candidates": acct.candidates,
+            "shipped": acct.shipped,
+            "withdrawn": acct.withdrawn,
+            "gold": acct.gold,
+            "restricted_license": acct.restricted_license,
+            "not_admitted": acct.not_admitted,
+        },
     }
     if dry_run:
         manifest["dry_run"] = True
@@ -524,7 +643,7 @@ def export_hf(
     n_meshes = copy_meshes(db, inc, out)
     for name, rows in tables.items():
         _write_jsonl(out / f"{name}.jsonl", rows)
-    write_cards(out, tables, n_meshes=n_meshes)
+    write_cards(out, tables, n_meshes=n_meshes, accounting=acct)
     manifest["counts"]["meshes"] = n_meshes
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return manifest
