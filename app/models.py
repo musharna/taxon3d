@@ -264,6 +264,11 @@ class VoterSession(Base):
     updated: Mapped[dt.datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
     # Verified-login link: NULL = anonymous, set = signed in with Hugging Face (SP2).
     user_id: Mapped[int | None] = mapped_column(ForeignKey("user.id"), nullable=True, index=True)
+    # Recruitment cohort: NULL = ambient traffic, set = arrived via a tagged campaign link.
+    # A LABEL, never a platform-assigned participant id — attribution needs only the group, and
+    # per-participant ballot counts already come from n_votes above. First write wins, so a
+    # participant returning by a different link keeps their original cohort (see app/study.py).
+    cohort: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
 
 
 class GoldPair(Base):
