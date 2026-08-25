@@ -867,7 +867,9 @@ def test_card_declares_a_viewer_config_for_every_table(db_session, tmp_path):
     # Exactly one default, and it is the table the card calls "the headline". The viewer opens on
     # the default config, so this decides what a first-time visitor actually sees.
     defaults = [c["config_name"] for c in configs if c.get("default")]
-    assert defaults == ["admissibility"], f"expected admissibility to be the default, got {defaults}"
+    assert defaults == ["admissibility"], (
+        f"expected admissibility to be the default, got {defaults}"
+    )
 
     # CONTROL: add a sixth table and its config MUST appear. A template with the five names baked
     # in satisfies every assertion above and fails right here — which is the only way this test
