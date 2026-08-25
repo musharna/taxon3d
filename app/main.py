@@ -55,6 +55,7 @@ from . import (
     paradigms,
     ranking,
     service,
+    study,
     submissions,
     variants,
 )
@@ -1260,7 +1261,33 @@ def arena_page(request: Request, db: Session = Depends(get_db)):
     roadmap = _roadmap_or_none(request, db)
     if roadmap is not None:
         return roadmap
-    return templates.TemplateResponse(request, "arena.html", _hero_stats(db))
+    # Tag a recruited arrival before any ballot is served, so every vote this session casts is
+    # attributable to the cohort. No-op without `?c=<label>`, so ambient traffic is untouched
+    # and creates no VoterSession row it would not otherwise have created.
+    study.stamp_cohort(
+        db,
+        request.state.session_id,
+        study.campaign_label(request.query_params.get(study.CAMPAIGN_PARAM)),
+    )
+    ctx = _hero_stats(db)
+    ctx["study"] = (
+        study.completion_state(db, request.state.session_id) if study.study_enabled() else None
+    )
+    return templates.TemplateResponse(request, "arena.html", ctx)
+
+
+@app.get("/study", response_class=HTMLResponse)
+def study_page(request: Request, db: Session = Depends(get_db)):
+    """Progress page for a recruited participant, carrying the completion code once earned.
+
+    404s unless a study is actually configured: the page invites someone to finish a paid task,
+    and an instance not running one must not make that offer.
+    """
+    if not study.study_enabled():
+        raise HTTPException(status_code=404, detail="no study is running")
+    return templates.TemplateResponse(
+        request, "study.html", {"study": study.completion_state(db, request.state.session_id)}
+    )
 
 
 @app.get("/api/meta")

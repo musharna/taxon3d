@@ -199,6 +199,16 @@ HF_CLIENT_SECRET = os.environ.get("BIO3D_HF_CLIENT_SECRET", "")
 #: release distributions already follow — claim only what this instance actually published.
 HF_DATASET_REPO = os.environ.get("BIO3D_HF_DATASET_REPO", "").strip().strip("/")
 
+# --- Recruited study (e.g. a paid Prolific cohort). OFF unless a completion code is set. ---
+#: The code a participant returns to the recruitment platform to be paid. Empty = no study is
+#: running, and `/study` 404s. Off by default because the page invites someone to finish a task;
+#: an instance not running one must not make that offer.
+STUDY_COMPLETION_CODE = os.environ.get("BIO3D_STUDY_COMPLETION_CODE", "").strip()
+#: Ballots required before the code is released. This is the paid deliverable, so it is read at
+#: request time from config rather than baked into the page — raising it must not retroactively
+#: strand participants who already finished under the old number.
+STUDY_REQUIRED_VOTES = int(os.environ.get("BIO3D_STUDY_REQUIRED_VOTES", "15"))
+
 
 def hf_dataset_url() -> str:
     """The corpus URL, or "" when none is published.

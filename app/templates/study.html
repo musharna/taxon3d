@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Your progress · Taxon3D{% endblock %}
+{% block description %}Progress through the Taxon3D evaluation task.{% endblock %}
+{# Recruited participants only. The route 404s unless a study is configured, so this template is
+   never reached on an instance that is not running one. `study.code` is None until the ballot
+   requirement is met — the release decision is made in app/study.py, NOT here, so an edit to this
+   file cannot leak the code early. #}
+{% block head_extra %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block content %}
+<section class="board">
+  <header class="b3d-page-head">
+    <h1>Your progress</h1>
+    <p class="subtle">
+      Thank you for helping evaluate 3D reconstructions of real organisms. Your votes are
+      anonymous and are used to rank the models on the public leaderboard.
+    </p>
+  </header>
+
+  <div class="ds-panel">
+    <p><b>{{ study.cast }}</b> of <b>{{ study.required }}</b> comparisons completed.</p>
+
+    {% if study.complete %}
+    <h3>All done — here is your completion code</h3>
+    <p><code style="font-size:1.3rem; letter-spacing:0.08em">{{ study.code }}</code></p>
+    <p class="subtle">
+      Paste this back into the recruitment platform to be paid. You are welcome to keep voting if
+      you would like to, but nothing further is required.
+    </p>
+    {% else %}
+    <h3>{{ study.remaining }} more to go</h3>
+    <p><a href="/arena">Continue voting →</a></p>
+    <p class="subtle">
+      Your completion code appears on this page once you reach {{ study.required }}. If you lose
+      this tab, return to <code>/study</code> — progress is tied to your browser session, so keep
+      using the same browser and do not clear site data before you finish.
+    </p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
