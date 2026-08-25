@@ -57,15 +57,21 @@ def stamp_cohort(db: Session, session_id: str, label: str | None) -> None:
 
 
 def study_enabled() -> bool:
-    """True when this instance is actually running a recruited study."""
-    return bool(config.STUDY_COMPLETION_CODE)
+    """True when this instance is actually running a recruited study.
+
+    Either credential is enough: a study can be run on the return URL alone (it embeds the code),
+    or on a typed code alone where the platform has no return mechanism.
+    """
+    return bool(config.STUDY_COMPLETION_CODE or config.STUDY_COMPLETION_URL)
 
 
 def completion_state(db: Session, session_id: str) -> dict:
-    """Progress toward the completion code for one voter.
+    """Progress toward completion for one voter.
 
-    `code` is None until the ballot requirement is met — the release decision lives here rather
-    than in the template, so a future template edit cannot accidentally render it early.
+    BOTH `code` and `return_url` are None until the ballot requirement is met. The release
+    decision lives here rather than in the template, so a future template edit cannot render
+    either one early — and the URL matters as much as the code, because it CARRIES the code in
+    its query string. Leaking the button is leaking the code, just wearing a coat.
     """
     required = max(1, int(config.STUDY_REQUIRED_VOTES))
     vs = db.get(VoterSession, session_id)
@@ -78,4 +84,5 @@ def completion_state(db: Session, session_id: str) -> dict:
         "complete": done,
         "cohort": (vs.cohort if vs else None),
         "code": config.STUDY_COMPLETION_CODE if done else None,
+        "return_url": config.STUDY_COMPLETION_URL if done else None,
     }

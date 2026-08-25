@@ -208,6 +208,13 @@ STUDY_COMPLETION_CODE = os.environ.get("BIO3D_STUDY_COMPLETION_CODE", "").strip(
 #: request time from config rather than baked into the page — raising it must not retroactively
 #: strand participants who already finished under the old number.
 STUDY_REQUIRED_VOTES = int(os.environ.get("BIO3D_STUDY_REQUIRED_VOTES", "15"))
+#: The recruitment platform's own "you finished" URL, e.g. Prolific's
+#: `https://app.prolific.com/submissions/complete?cc=<CODE>`. Preferred over the manual code:
+#: Prolific's guidance is that an automatic return reduces incomplete submissions, and a typed
+#: code produces their documented NOCODE failure. The code is still shown alongside it as the
+#: fallback for exactly the case NOCODE describes — a return that does not fire.
+#: It embeds the completion code, so it is released on the same ballot gate, never earlier.
+STUDY_COMPLETION_URL = os.environ.get("BIO3D_STUDY_COMPLETION_URL", "").strip()
 
 
 def hf_dataset_url() -> str:
