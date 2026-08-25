@@ -823,3 +823,61 @@ def test_card_quantifies_what_was_withheld(db_session, tmp_path):
         "the withheld count in the card is hardcoded: the corpus changed and the card did not"
     )
     assert after_card != before_card, "card text is identical across two different corpora"
+
+
+def test_card_declares_a_viewer_config_for_every_table(db_session, tmp_path):
+    """Every JSONL table must be declared in the card's `configs` block, or it has no viewer.
+
+    Without `configs`, the Hub serves the five tables as bare downloads and the dataset viewer
+    shows nothing — the corpus is only browsable by someone who already decided to fetch it. That
+    is the discovery failure this dataset exists to avoid, so the block is a shipped artifact, not
+    a nicety.
+
+    The config names are DERIVED from the same `tables` dict that names the `.jsonl` files
+    (`export_hf` writes `out / f"{name}.jsonl"` for each key). Deriving is the point: a
+    hand-listed block is a second, parallel enumeration of the tables, free to drift the moment a
+    sixth table is added — and the reader would find a table with no viewer and no error. The
+    control at the bottom is what forces derivation; the assertions above it all pass on a
+    hardcoded five-config template.
+    """
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    tables = hf.build_tables(db_session, inc)
+
+    def configs_for(tbls, out_name):
+        out = tmp_path / out_name
+        hf.write_cards(out, tbls, n_meshes=len(tbls["outputs"]))
+        card = (out / "README.md").read_text()
+        front = yaml.safe_load(card.split("---")[1])
+        return front.get("configs"), card
+
+    configs, card = configs_for(tables, "real")
+    assert configs, "card front matter declares no `configs` — the viewer will be empty"
+
+    declared = {c["config_name"]: c["data_files"] for c in configs}
+    assert declared.keys() == tables.keys(), (
+        f"configs do not match the tables written: declared {sorted(declared)}, "
+        f"tables {sorted(tables)}"
+    )
+    for name in tables:
+        assert declared[name] == f"{name}.jsonl", (
+            f"config {name!r} points at {declared[name]!r}, but export_hf writes {name}.jsonl"
+        )
+
+    # Exactly one default, and it is the table the card calls "the headline". The viewer opens on
+    # the default config, so this decides what a first-time visitor actually sees.
+    defaults = [c["config_name"] for c in configs if c.get("default")]
+    assert defaults == ["admissibility"], f"expected admissibility to be the default, got {defaults}"
+
+    # CONTROL: add a sixth table and its config MUST appear. A template with the five names baked
+    # in satisfies every assertion above and fails right here — which is the only way this test
+    # can tell a derived block from a hardcoded one.
+    extra = dict(tables)
+    extra["provenance"] = [{"output_id": 1, "note": "synthetic"}]
+    extra_configs, _ = configs_for(extra, "extra")
+    extra_declared = {c["config_name"]: c["data_files"] for c in extra_configs}
+    assert "provenance" in extra_declared, (
+        "a newly added table got no viewer config — the configs block is hardcoded, not derived "
+        "from the tables that are actually written"
+    )
+    assert extra_declared["provenance"] == "provenance.jsonl"
