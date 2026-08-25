@@ -108,6 +108,16 @@
   <div class="ds-panel">
     <h3>Explore the corpus</h3>
     <ul class="ds-release-list">
+      {% if hf_dataset_url %}
+      {# The only link here that hands over files rather than a view of them. Guarded because an
+         instance with no published corpus must not advertise one — same rule as the JSON-LD. #}
+      <li>
+        <a href="{{ hf_dataset_url }}" rel="noopener">Download the corpus on Hugging Face</a> —
+        meshes plus the admissibility, completeness, vote and judge tables.
+        <span class="subtle">Redistributable outputs only; commercial-API outputs are excluded,
+        so it is not the whole arena. The dataset card says exactly what is withheld and why.</span>
+      </li>
+      {% endif %}
       <li>
         <a href="/coverage">Coverage matrix</a> — which generators have produced an output for
         which reference specimen, and where the gaps are.
