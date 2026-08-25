@@ -22,3 +22,6 @@ public_bundle/
 # Internal planning notes (plans/specs) and agent config — never publish
 docs/superpowers/
 CLAUDE.md
+
+# Codex consult transcripts — local tool scratch, never ship (this repo is public)
+.codex-consult/
