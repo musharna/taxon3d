@@ -404,6 +404,7 @@ tags:
   - organisms
   - human-preference
   - evaluation
+{configs}
 ---
 
 # Taxon3D — an admissibility-gated organism corpus
@@ -510,6 +511,33 @@ def _withheld_summary(acct: ExportAccounting | None) -> str:
     )
 
 
+#: The table the dataset viewer opens on. `admissibility` because the card calls it the headline,
+#: and the default config is the first thing a visitor sees — so it should be the reason to look
+#: rather than whichever table happens to sort first.
+_DEFAULT_CONFIG = "admissibility"
+
+
+def _viewer_configs(tables: dict[str, list[dict]]) -> str:
+    """Render the card's `configs` YAML block from the tables actually written.
+
+    Without this block the Hub gives the dataset NO viewer: the five tables are served as bare
+    downloads, so the corpus is only inspectable by someone who has already decided to fetch 400 MB.
+    For a dataset published to be found, that is the whole game.
+
+    Derived from `tables`, never hand-listed, because `export_hf` writes `out / f"{name}.jsonl"`
+    from these same keys. A hardcoded block would be a second enumeration of the tables, free to
+    drift the moment a sixth is added — and the failure is silent in the worst way: a shipped table
+    with no viewer, no error, and nothing on the page to suggest it is missing.
+    """
+    lines = ["configs:"]
+    for name in tables:
+        lines.append(f"  - config_name: {name}")
+        lines.append(f'    data_files: "{name}.jsonl"')
+        if name == _DEFAULT_CONFIG:
+            lines.append("    default: true")
+    return "\n".join(lines)
+
+
 def write_cards(
     out_dir: Path,
     tables: dict[str, list[dict]],
@@ -525,6 +553,7 @@ def write_cards(
     out.mkdir(parents=True, exist_ok=True)
     (out / "README.md").write_text(
         _CARD.format(
+            configs=_viewer_configs(tables),
             n_meshes=n_meshes,
             n_outputs=len(tables["outputs"]),
             n_admissibility=len(tables["admissibility"]),
