@@ -152,3 +152,68 @@ def test_participant_id_is_never_stored(monkeypatch):
         stored = " ".join(str(v) for v in vars(vs).values() if v is not None)
     assert "abc123secret" not in stored
     assert "s1" not in stored.split()
+
+
+def test_completion_url_is_withheld_before_the_requirement(monkeypatch):
+    """The return link carries the completion code in its query string, so it is gated too.
+
+    Rendering it early would let a participant submit to Prolific without doing the task — the
+    same failure as leaking the bare code, just wearing a button.
+    """
+    monkeypatch.setattr(config, "STUDY_COMPLETION_CODE", "CODE-XYZ")
+    monkeypatch.setattr(
+        config, "STUDY_COMPLETION_URL", "https://app.prolific.com/submissions/complete?cc=CODE-XYZ"
+    )
+    monkeypatch.setattr(config, "STUDY_REQUIRED_VOTES", 5)
+    c, sid = _voter()
+    c.get("/arena?c=pilot-1")
+    assert _vote_n(c, 2) >= 1, "fixture cast no votes — the assertion below would be vacuous"
+    assert "app.prolific.com" not in c.get("/study").text
+
+
+def test_completion_url_is_offered_once_complete(monkeypatch):
+    """POSITIVE CONTROL, and the reason this exists at all.
+
+    Prolific's own guidance is that an automatic return reduces incomplete submissions, while
+    manual codes produce their documented NOCODE failure. The code stays on the page as a
+    fallback for when the return does not fire — which is exactly the case NOCODE describes.
+    """
+    monkeypatch.setattr(config, "STUDY_COMPLETION_CODE", "CODE-XYZ")
+    monkeypatch.setattr(
+        config, "STUDY_COMPLETION_URL", "https://app.prolific.com/submissions/complete?cc=CODE-XYZ"
+    )
+    monkeypatch.setattr(config, "STUDY_REQUIRED_VOTES", 3)
+    c, sid = _voter()
+    c.get("/arena?c=pilot-1")
+    cast = _vote_n(c, 12)
+    assert cast >= 3, f"only {cast} votes castable; cannot exercise the release path"
+    body = c.get("/study").text
+    assert "app.prolific.com/submissions/complete" in body
+    assert "CODE-XYZ" in body, "the manual code must remain as the fallback when return fails"
+
+
+def test_arena_tells_a_recruited_participant_where_the_code_is(monkeypatch):
+    """Without this the task dead-ends: they vote 15 times and nothing points at /study.
+
+    The progress line is the ONLY thing on the arena page connecting a paid participant to the
+    artefact they are paid to return, so it is asserted, not assumed.
+    """
+    monkeypatch.setattr(config, "STUDY_COMPLETION_CODE", "CODE-XYZ")
+    monkeypatch.setattr(config, "STUDY_REQUIRED_VOTES", 15)
+    c, sid = _voter()
+    body = c.get("/arena?c=pilot-1").text
+    assert "/study" in body, "arena gives a recruited participant no route to their code"
+    assert "15" in body
+
+
+def test_arena_shows_no_study_banner_to_an_ambient_visitor(monkeypatch):
+    """CONTROL for the test above: an untagged visitor must see no task framing at all.
+
+    Otherwise every ordinary voter is told they are partway through a paid study — which is both
+    confusing and false. Distinguishes "renders for participants" from "renders always".
+    """
+    monkeypatch.setattr(config, "STUDY_COMPLETION_CODE", "CODE-XYZ")
+    monkeypatch.setattr(config, "STUDY_REQUIRED_VOTES", 15)
+    c, sid = _voter()
+    body = c.get("/arena").text
+    assert "/study" not in body

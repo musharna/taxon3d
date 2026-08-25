@@ -3,6 +3,20 @@
 {# One line: a source line-wrap here put literal newlines inside `content="…"`. #}
 {% block description %}Compare AI-generated 3D reconstructions of a real organism and vote for the most faithful. Every vote feeds the Bradley–Terry leaderboards.{% endblock %}
 {% block content %}
+{# Recruited-participant progress. Rendered ONLY for a voter carrying a cohort tag, because
+   otherwise every ordinary visitor is told they are partway through a paid study — confusing and
+   untrue. Without it the task dead-ends: a participant votes their fifteen and nothing on this
+   page points at /study, where the thing they are paid to return actually lives.
+
+   Deliberately one line, above the arena and not inside it: the hero that used to sit here was
+   deleted for costing 162px of the first viewport (see below), and this must not resurrect that
+   problem for the people whose attention was bought. #}
+{% if study and study.cohort %}
+<p class="subtle" style="margin:0 0 .5rem">
+  Evaluation task: <b>{{ study.cast }}</b> of <b>{{ study.required }}</b> comparisons done —
+  <a href="/study">{% if study.complete %}get your completion code{% else %}check progress{% endif %}</a>
+</p>
+{% endif %}
 <section class="arena" data-can-flag="{{ 'true' if internal_pages() else 'false' }}">
   {# The hero that used to sit here was DELETED 2026-08-08. It restated the homepage's pitch on a
      page you can only reach by clicking "Enter the arena" from that homepage, and it cost 162px of

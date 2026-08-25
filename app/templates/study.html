@@ -20,11 +20,24 @@
     <p><b>{{ study.cast }}</b> of <b>{{ study.required }}</b> comparisons completed.</p>
 
     {% if study.complete %}
-    <h3>All done — here is your completion code</h3>
-    <p><code style="font-size:1.3rem; letter-spacing:0.08em">{{ study.code }}</code></p>
+    <h3>All done — thank you</h3>
+    {% if study.return_url %}
+    {# The return link is the PRIMARY path: an automatic return is what the recruitment platform
+       recommends, because a typed code is what produces their documented NOCODE submissions. The
+       bare code stays below as the fallback for exactly that failure — a return that does not
+       fire. `noopener` because this leaves our origin. #}
+    <p>
+      <a class="btn" href="{{ study.return_url }}" rel="noopener">Submit your completion &rarr;</a>
+    </p>
+    {% endif %}
+    {% if study.code %}
     <p class="subtle">
-      Paste this back into the recruitment platform to be paid. You are welcome to keep voting if
-      you would like to, but nothing further is required.
+      If that did not work, paste this completion code in manually:
+      <code style="font-size:1.15rem; letter-spacing:0.08em">{{ study.code }}</code>
+    </p>
+    {% endif %}
+    <p class="subtle">
+      You are welcome to keep voting if you would like to, but nothing further is required.
     </p>
     {% else %}
     <h3>{{ study.remaining }} more to go</h3>
