@@ -2710,6 +2710,7 @@ def dataset_page(request: Request, db: Session = Depends(get_db)):
             "releases": releases,
             "composition": composition,
             "dataset_ld": _dataset_jsonld(releases),
+            "hf_dataset_url": config.hf_dataset_url(),
         },
     )
 
@@ -2726,6 +2727,12 @@ def _dataset_jsonld(releases: list[dict]) -> dict:
     `distribution` is emitted only for releases that exist. The key asserts a retrievable file,
     so on an instance with no release cut it is absent rather than pointing at a 404 — markup
     promising a download that isn't there is worse than no markup.
+
+    The Hugging Face corpus is the only distribution here that names an actual file. Every release
+    entry sets `contentUrl` to this same page, so a crawler following one lands back where it
+    started and the record has no retrievable download at all. `config.HF_DATASET_REPO` is empty
+    by default and gated on for exactly the reason above: an instance that has published no corpus
+    must not advertise one.
     """
     ld: dict = {
         "@context": "https://schema.org",
@@ -2749,9 +2756,20 @@ def _dataset_jsonld(releases: list[dict]) -> dict:
             "Bradley-Terry",
         ],
     }
+    distribution: list[dict] = []
+    hf_url = config.hf_dataset_url()
+    if hf_url:
+        distribution.append(
+            {
+                "@type": "DataDownload",
+                "name": "Admissibility-gated organism corpus (Hugging Face)",
+                "contentUrl": hf_url,
+                "encodingFormat": "application/json",
+            }
+        )
     if releases:
         ld["version"] = releases[0]["version"]
-        ld["distribution"] = [
+        distribution += [
             {
                 "@type": "DataDownload",
                 "name": r["version"],
@@ -2759,6 +2777,8 @@ def _dataset_jsonld(releases: list[dict]) -> dict:
             }
             for r in releases
         ]
+    if distribution:
+        ld["distribution"] = distribution
     return ld
 
 

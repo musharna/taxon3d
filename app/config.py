@@ -191,6 +191,26 @@ SEMANTIC_ADMISSIBILITY_MODE = _valid_semantic_mode(
 # --- Verified login (Hugging Face OAuth). Off unless client id+secret are set. ---
 HF_CLIENT_ID = os.environ.get("BIO3D_HF_CLIENT_ID", "")
 HF_CLIENT_SECRET = os.environ.get("BIO3D_HF_CLIENT_SECRET", "")
+
+#: The published corpus on the Hugging Face Hub, as `owner/name`, or "" when this instance has
+#: not published one. Empty is the DEFAULT and it must stay that way: the value becomes a
+#: schema.org `distribution` asserting a retrievable download, so a fork or a dev instance that
+#: inherited a hardcoded repo id would advertise someone else's dataset as its own. Same rule the
+#: release distributions already follow — claim only what this instance actually published.
+HF_DATASET_REPO = os.environ.get("BIO3D_HF_DATASET_REPO", "").strip().strip("/")
+
+
+def hf_dataset_url() -> str:
+    """The corpus URL, or "" when none is published.
+
+    A function rather than a derived constant: a module-level `HF_DATASET_URL = f(...)` is
+    evaluated once at import, so it silently keeps the old value whenever `HF_DATASET_REPO` is
+    changed afterwards — by a test, a reload, or any settings override. One source of truth,
+    read at call time.
+    """
+    return f"https://huggingface.co/datasets/{HF_DATASET_REPO}" if HF_DATASET_REPO else ""
+
+
 _DEV_BASE_URL = "http://127.0.0.1:8000"  # local-only; never correct on a public deploy
 PUBLIC_BASE_URL = os.environ.get("BIO3D_PUBLIC_BASE_URL", _DEV_BASE_URL).rstrip("/")
 if IS_PUBLIC_DEPLOY and PUBLIC_BASE_URL == _DEV_BASE_URL:

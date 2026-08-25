@@ -7,6 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Cite](https://img.shields.io/badge/cite-CITATION.cff-8957e5)](CITATION.cff)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21789280.svg)](https://doi.org/10.5281/zenodo.21789280)
+[![Dataset](https://img.shields.io/badge/🤗%20dataset-taxon3d--corpus--v1-ff9d00)](https://huggingface.co/datasets/musharna/taxon3d-corpus-v1)
 
 > **Note** — this project was called _Bio 3D Arena_ until August 2026. The name collided with the
 > [Bio3D R package](https://cran.r-project.org/package=bio3d) for protein structure analysis and
@@ -388,6 +389,11 @@ The **code** in this repository is MIT-licensed — see [LICENSE](LICENSE).
 The **corpus is not in this repository.** `data/` is gitignored; what you are cloning
 is the arena software, its tests and its documentation. That distinction is
 deliberate, because the corpus is not uniformly redistributable:
+
+> The part that **is** redistributable is published separately, on the Hugging Face Hub as
+> [`musharna/taxon3d-corpus-v1`](https://huggingface.co/datasets/musharna/taxon3d-corpus-v1) —
+> 292 of 533 candidate outputs, with the admissibility verdicts that gate them. The 241 withheld
+> are itemised on the dataset card, and the split follows exactly the rule below.
 
 - **Generated 3D outputs** carry the terms of whichever model produced them. Some are
   freely redistributable (MIT-licensed generators such as TRELLIS, TripoSR and
