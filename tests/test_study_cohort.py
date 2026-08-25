@@ -217,3 +217,53 @@ def test_arena_shows_no_study_banner_to_an_ambient_visitor(monkeypatch):
     c, sid = _voter()
     body = c.get("/arena").text
     assert "/study" not in body
+
+
+def test_vote_response_carries_study_progress(monkeypatch):
+    """The counter must update WITHOUT a page navigation, or a participant cannot see they're done.
+
+    Reported by a real pilot participant 2026-08-25: the arena's progress line is rendered
+    server-side on page load, while voting happens through fetch("/api/vote") with no reload — so
+    it froze at its initial value. The only way to see the true count was to click through to
+    /study and come back, and again after finishing to get the code. Some participants overshot
+    (one cast 100 ballots against a stated 10) and some would simply not realise they had to
+    navigate at all.
+
+    So the vote RESPONSE carries the progress. Asserted server-side because that is the contract
+    the client depends on; a client that stops reading it is a visible regression, a server that
+    stops sending it is silent.
+    """
+    monkeypatch.setattr(config, "STUDY_COMPLETION_CODE", "CODE-XYZ")
+    monkeypatch.setattr(config, "STUDY_REQUIRED_VOTES", 3)
+    c, sid = _voter()
+    c.get("/arena?c=pilot-1")
+
+    r = c.get("/api/next?set=pair")
+    assert r.status_code == 200
+    cid = r.json()["comparison_id"]
+    body = c.post("/api/vote", json={"comparison_id": cid, "winner": "a"}).json()
+
+    assert "study" in body, "vote response carries no progress — the counter cannot update"
+    assert body["study"]["cast"] == 1
+    assert body["study"]["required"] == 3
+    assert body["study"]["complete"] is False
+    # The code must NOT ride along on an incomplete ballot: this response reaches the browser
+    # after every single vote, so leaking it here would hand it over on ballot one.
+    assert "code" not in body["study"]
+    assert "CODE-XYZ" not in str(body)
+
+
+def test_vote_response_omits_study_for_an_ambient_voter(monkeypatch):
+    """CONTROL: an untagged voter's response must carry no study block at all.
+
+    Without this, `study` could be attached unconditionally and the test above would still pass
+    while every ordinary voter's client was told it was partway through a paid task.
+    """
+    monkeypatch.setattr(config, "STUDY_COMPLETION_CODE", "CODE-XYZ")
+    monkeypatch.setattr(config, "STUDY_REQUIRED_VOTES", 3)
+    c, sid = _voter()
+    c.get("/arena")
+    r = c.get("/api/next?set=pair")
+    cid = r.json()["comparison_id"]
+    body = c.post("/api/vote", json={"comparison_id": cid, "winner": "a"}).json()
+    assert body.get("study") is None

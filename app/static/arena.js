@@ -111,6 +111,24 @@ async function loadNext() {
   }
 }
 
+// Keep the recruited-study counter honest without a page load. The progress line is rendered
+// server-side on first paint, but voting never reloads the page — so before this it froze at its
+// initial value for the whole task. A pilot participant reported it 2026-08-25: the only way to
+// see the true count was to click through to /study and come back, and again at the end to get
+// the completion code. Some overshot badly (one cast 100 ballots against a stated 10).
+//
+// `st` is null for ordinary voters — the server only sends it to a cohort-tagged session, and it
+// never carries the completion code (see app/study.py `progress`), so this cannot leak it.
+function updateStudyProgress(st) {
+  const el = document.getElementById("study-progress");
+  if (!el || !st) return;
+  const done = st.cast >= st.required;
+  el.innerHTML =
+    "Evaluation task: <b>" + st.cast + "</b> of <b>" + st.required + "</b> comparisons done — " +
+    '<a href="/study">' + (done ? "get your completion code" : "check progress") + "</a>";
+  el.classList.toggle("study-done", done);
+}
+
 // The follow-up ballot is already in hand the moment a vote lands: /api/vote and /api/kvote both
 // return it, and it sits in `pendingNext` until "Next pair" is clicked. Until that click nothing
 // is downloading — then the voter pays the entire transfer at once. Measured 2026-07-31 on Fast
@@ -398,6 +416,7 @@ async function submitKvote(ballotId, bestOutputId) {
       return;
     }
     const data = await res.json();
+    updateStudyProgress(data.study);
     if (data.reveal) {
       // Hold the follow-up ballot/pair until "Next pair" is clicked — showKwiseReveal labels
       // each card in place with its real name and marks the pick, same grid stays on screen.
@@ -522,6 +541,7 @@ async function vote(winner) {
       return;
     }
     const data = await res.json();
+    updateStudyProgress(data.study);
     if (inSessionMode()) {
       // In a scoped mode the embedded `data.next` shortcut is built by the
       // regular (unscoped) builder, so ignore it and re-fetch through the
