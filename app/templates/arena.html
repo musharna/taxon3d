@@ -12,7 +12,7 @@
    deleted for costing 162px of the first viewport (see below), and this must not resurrect that
    problem for the people whose attention was bought. #}
 {% if study and study.cohort %}
-<p class="subtle" style="margin:0 0 .5rem">
+<p class="subtle" id="study-progress" style="margin:0 0 .5rem">
   Evaluation task: <b>{{ study.cast }}</b> of <b>{{ study.required }}</b> comparisons done —
   <a href="/study">{% if study.complete %}get your completion code{% else %}check progress{% endif %}</a>
 </p>

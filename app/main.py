@@ -1276,6 +1276,19 @@ def arena_page(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(request, "arena.html", ctx)
 
 
+def _study_progress(request: Request, db: Session) -> dict | None:
+    """Ballot progress to ride back on a vote response, or None for an ordinary voter.
+
+    Returned per-vote so the arena's counter can update without a page load. Gated on the voter
+    actually being in a cohort: an ambient voter's client must not be told it is partway through
+    a paid task. Carries no credential by construction — see `study.progress`.
+    """
+    if not study.study_enabled():
+        return None
+    state = study.progress(db, request.state.session_id)
+    return state if state.get("cohort") else None
+
+
 @app.get("/study", response_class=HTMLResponse)
 def study_page(request: Request, db: Session = Depends(get_db)):
     """Progress page for a recruited participant, carrying the completion code once earned.
@@ -1393,7 +1406,7 @@ def api_vote(
             return {"name": names.get(o.generator_id, "Unknown") if o else "Unknown"}
 
         reveal = {"a": _rev_side(out_a), "b": _rev_side(out_b), "winner": vote_in.winner}
-    return {"status": "ok", "next": nxt, "reveal": reveal}
+    return {"status": "ok", "next": nxt, "reveal": reveal, "study": _study_progress(request, db)}
 
 
 @app.post("/api/kvote")

@@ -65,24 +65,36 @@ def study_enabled() -> bool:
     return bool(config.STUDY_COMPLETION_CODE or config.STUDY_COMPLETION_URL)
 
 
-def completion_state(db: Session, session_id: str) -> dict:
-    """Progress toward completion for one voter.
+def progress(db: Session, session_id: str) -> dict:
+    """Ballot progress for one voter, carrying NO credential.
 
-    BOTH `code` and `return_url` are None until the ballot requirement is met. The release
-    decision lives here rather than in the template, so a future template edit cannot render
-    either one early — and the URL matters as much as the code, because it CARRIES the code in
-    its query string. Leaking the button is leaking the code, just wearing a coat.
+    Split from `completion_state` rather than filtered out of it, because this is what rides on
+    every `/api/vote` response — the browser sees it after each ballot. A shape that simply never
+    contains the code cannot leak it on ballot one, whereas a redaction step is something a later
+    edit can forget.
     """
     required = max(1, int(config.STUDY_REQUIRED_VOTES))
     vs = db.get(VoterSession, session_id)
     cast = int(vs.n_votes or 0) if vs else 0
-    done = cast >= required
     return {
         "cast": cast,
         "required": required,
         "remaining": max(0, required - cast),
-        "complete": done,
+        "complete": cast >= required,
         "cohort": (vs.cohort if vs else None),
-        "code": config.STUDY_COMPLETION_CODE if done else None,
-        "return_url": config.STUDY_COMPLETION_URL if done else None,
     }
+
+
+def completion_state(db: Session, session_id: str) -> dict:
+    """Progress PLUS the completion credentials, for the /study page only.
+
+    BOTH `code` and `return_url` stay None until the ballot requirement is met. The release
+    decision lives here rather than in the template, so a future template edit cannot render
+    either one early — and the URL matters as much as the code, because it CARRIES the code in
+    its query string. Leaking the button is leaking the code, just wearing a coat.
+    """
+    state = progress(db, session_id)
+    done = state["complete"]
+    state["code"] = config.STUDY_COMPLETION_CODE if done else None
+    state["return_url"] = config.STUDY_COMPLETION_URL if done else None
+    return state
