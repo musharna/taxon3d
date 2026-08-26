@@ -965,10 +965,21 @@ def _build_ballot(
     # builder reaches `_build_comparison` only as a fallback, and most tasks can fill a quad, so
     # the fallback (and with it every attention check) would almost never fire. Hoisting the
     # injection to the routing point makes the check independent of which ballot shape follows.
-    if random.random() < config.GOLD_RATE:
+    # Whether to check is a question about THIS voter, not an independent coin per ballot. A
+    # flat rate leaves coverage to chance — (1 - rate)^n of sessions are never measured at all —
+    # so the decision reads how many ballots this session has gone unchecked and whether we have
+    # ever gotten a reading on them. See integrity.should_serve_gold.
+    _vs = db.get(VoterSession, session_id)
+    if integrity.should_serve_gold(
+        integrity.ballots_since_last_gold(db, session_id),
+        _vs.gold_seen if _vs is not None else 0,
+    ):
         gold = _build_gold_comparison(db, session_id, _criterion_or_default(db, criterion_slug))
         if gold is not None:
             return gold
+        # No gold pair available (none configured, or the pair was purged). Falling through
+        # serves a real ballot, and because the counter only restarts on a check that was
+        # actually SERVED, the deadline stays due and the next ballot tries again.
 
     if mode == BALLOT_MODE_KWISE:
         return _build_kwise_comparison(

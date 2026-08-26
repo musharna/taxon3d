@@ -10,16 +10,17 @@ from __future__ import annotations
 
 import functools
 import json as _json
+import random
 import time
 import urllib.parse as _urlparse
 import urllib.request as _urlreq
 from collections import OrderedDict, defaultdict, deque
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import config
-from .models import Comparison, VoterSession, Vote
+from .models import Comparison, KBallot, VoterSession, Vote
 
 
 class InMemoryRateLimiter:
@@ -223,6 +224,77 @@ def gold_outcome(winner: str, expected: str | None) -> bool | None:
     if winner not in ("a", "b"):
         return None
     return winner == expected
+
+
+def ballots_since_last_gold(db: Session, session_id: str) -> int:
+    """How many ballots this session has seen since its last attention check (ever, if none).
+
+    Counts BALLOTS, not relations. A k-wise ballot resolves into K-1 Comparison rows sharing
+    one `ballot_id`, so counting comparisons flat would clock a 4-up voter three times per
+    ballot; and the k-wise builder writes its KBallot at serve time while those Comparison rows
+    only appear on resolution, so counting comparisons alone would miss a ballot that was shown
+    and abandoned. Pairwise comparisons (ballot_id NULL) plus KBallot rows counts each ballot
+    exactly once on either path.
+
+    Served, not answered, is the unit deliberately. It over-counts a voter who reloads without
+    voting, but the error direction is safe: more ballots served brings the next check SOONER,
+    never later, so there is no way to spend requests to push a check away.
+    """
+    last_gold = db.execute(
+        select(func.max(Comparison.created)).where(
+            Comparison.session_id == session_id, Comparison.is_gold.is_(True)
+        )
+    ).scalar()
+
+    pairwise = select(func.count()).where(
+        Comparison.session_id == session_id,
+        Comparison.is_gold.is_(False),
+        Comparison.ballot_id.is_(None),
+    )
+    kwise = select(func.count()).where(KBallot.session_id == session_id)
+    if last_gold is not None:
+        pairwise = pairwise.where(Comparison.created > last_gold)
+        kwise = kwise.where(KBallot.created > last_gold)
+    return int(db.execute(pairwise).scalar() or 0) + int(db.execute(kwise).scalar() or 0)
+
+
+def should_serve_gold(ballots_since: int, gold_seen: int, *, rng=random.random) -> bool:
+    """Decide whether this ballot should be an attention check.
+
+    Injection used to be `random.random() < GOLD_RATE` on every ballot, with no reference to
+    the session. That makes coverage a by-product of sampling rather than a property: a voter
+    escapes measurement entirely with probability (1 - rate)^n. An attention check is a
+    qualification on the voter, not a sprinkle on the stream, so it is scheduled instead.
+
+    While a session is UNMEASURED (`gold_seen == 0`) the conditional probability is
+    1/remaining, which places the first check uniformly at random among the first
+    GOLD_DEADLINE ballots and makes it certain by the last of them. Uniform matters as much as
+    certain: a hard "force it at ballot N" would guarantee coverage while telling a farmer
+    exactly which ballot to answer honestly, trading a coverage defect for a gaming surface.
+
+    Once a reading exists, the deadline stops applying and checks go back to being occasional
+    at GOLD_RATE — otherwise every voter would be re-checked every N ballots forever.
+
+    `gold_seen`, not golds served, is the measured-ness test on purpose: it is the counter an
+    abstention deliberately leaves alone (see `gold_outcome`), so a voter who answers "both are
+    bad" is still unmeasured and still owed a check. Pacing restarts anyway, because
+    `ballots_since_last_gold` keys on the check being SERVED — so an abstainer gets another
+    check within a window rather than several in a row.
+    """
+    if config.GOLD_RATE <= 0.0:
+        # Rate 0 is the operator's off switch for attention checks, and the deadline must not
+        # override it — a schedule that still forced checks would mean "off" turned nothing off.
+        return False
+    if gold_seen == 0:
+        remaining = config.GOLD_DEADLINE - ballots_since
+        if remaining <= 1:
+            return True
+        # The deadline raises a FLOOR under the configured rate rather than replacing it. Taking
+        # the max keeps this a strict strengthening: a rate set above the schedule's own
+        # probability still governs, so raising GOLD_RATE cannot be throttled by the very
+        # mechanism meant to guarantee coverage.
+        return rng() < max(config.GOLD_RATE, 1.0 / remaining)
+    return rng() < config.GOLD_RATE
 
 
 def record_gold_outcome(db: Session, session_id: str, passed: bool) -> VoterSession:

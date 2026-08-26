@@ -228,6 +228,10 @@ def test_kwise_ballot_carries_the_reference_photos(arena, monkeypatch):
     client, quad_slug, _pair_slug, _, _ = arena
     refs = [{"url": "/media/ref/rose.jpg", "credit": "CC BY 2.0 — someone"}]
     monkeypatch.setattr("app.service.reference_images_for_task", lambda db, task: refs)
+    # Attention checks off. They are pairwise by construction and are entitled to displace a
+    # quad (test_gold_attention_checks_fire_on_both_ballot_shapes asserts exactly that), so
+    # leaving them on would let one stand in for the quad this test is trying to inspect.
+    monkeypatch.setattr(config, "GOLD_RATE", 0.0)
 
     data = client.get(f"/api/next?criterion=overall&category={quad_slug}&set=kwise").json()
     assert data.get("kind") == "kwise", data
