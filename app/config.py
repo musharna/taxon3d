@@ -127,8 +127,22 @@ TRUST_FLY_CLIENT_IP = os.environ.get("BIO3D_TRUST_FLY_CLIENT_IP", "false").lower
     "true",
     "yes",
 )
-# Probability of serving a gold-standard attention-check pair instead of a real one.
+# Probability of serving a gold-standard attention-check pair instead of a real one, applied
+# once a session has been measured at least once.
 GOLD_RATE = float(os.environ.get("BIO3D_GOLD_RATE", "0.1"))
+# How many ballots a never-yet-measured voter may see before a check is certain.
+#
+# At GOLD_RATE alone, coverage is only a by-product of sampling: a session voting n ballots
+# escapes measurement with probability (1 - rate)^n, which is 31% at the ~11 ballots the
+# 2026-08-25 pilot produced per head — and 5 of its 15 participants were indeed never checked,
+# leaving each of them a trust of 1.0 that meant "never looked at" rather than "passed".
+#
+# 8 is a judgement call about when a voter starts to matter, not a derived constant. A visitor
+# who casts two ballots and leaves barely moves a board and only meets a check 25% of the time
+# (against 19% before), so the cost to a drive-by is small; anyone who reaches 8 is certainly
+# measured. Raising it weakens coverage for short sessions; lowering it shows more decoys to
+# casual visitors, and a gold pair deliberately contains a bad mesh.
+GOLD_DEADLINE = int(os.environ.get("BIO3D_GOLD_DEADLINE", "8"))
 # Sessions below this trust score are excluded from the authoritative BT leaderboard.
 TRUST_THRESHOLD = float(os.environ.get("BIO3D_TRUST_THRESHOLD", "0.5"))
 # Cohorts whose votes stay in the database but never fit a published board.

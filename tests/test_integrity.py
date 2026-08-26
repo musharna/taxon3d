@@ -336,3 +336,173 @@ def test_methodology_page_renders():
     assert r.status_code == 200
     assert "integrity" in r.text.lower()
     assert "Gold attention checks" in r.text
+
+
+# --- Attention-check coverage -------------------------------------------------------------
+# Injection used to be a memoryless coin flip per ballot, so whether a voter was ever checked
+# was a random variable: P(never) = (1 - rate)^n, which is 31% at the ~11 ballots a recruited
+# session actually produced. Five of the fifteen 2026-08-25 pilot participants were in fact
+# never measured, and their trust of 1.0 meant "never looked at" rather than "passed".
+
+#: conftest zeroes BIO3D_GOLD_RATE for the whole suite so unrelated tests are deterministic, and
+#: rate 0 is the operator's OFF switch for checks entirely — so a test about the schedule has to
+#: restore a running rate or it is asserting against a disabled feature. Mirrors the shipped
+#: default in app/config.py; the tests below read it rather than the ambient value.
+_RUNNING_GOLD_RATE = 0.1
+
+
+def test_an_unmeasured_voter_is_certain_to_be_checked_at_the_deadline(monkeypatch):
+    monkeypatch.setattr(config, "GOLD_RATE", _RUNNING_GOLD_RATE)
+    n = config.GOLD_DEADLINE
+    # `ballots_since` is how many ballots have already gone by unmeasured, so n - 1 means this
+    # is the last ballot inside the window. An rng returning almost 1.0 would defeat any
+    # sampled rate; only a forced check survives it.
+    assert integrity.should_serve_gold(n - 1, 0, rng=lambda: 0.999999) is True
+
+
+def test_rate_zero_turns_attention_checks_off_entirely():
+    # The suite-wide default, asserted rather than assumed: an operator who sets GOLD_RATE=0
+    # means "no checks", and the deadline must not override that. Without this the schedule
+    # would quietly reinstate checks in every deployment that had switched them off.
+    assert config.GOLD_RATE == 0.0, "conftest is expected to disable gold for the suite"
+    assert integrity.should_serve_gold(config.GOLD_DEADLINE * 5, 0, rng=lambda: 0.0) is False
+
+
+def test_the_first_check_lands_uniformly_across_the_deadline_window(monkeypatch):
+    """Guaranteed AND unpredictable: the deadline must not make the check sit at a fixed slot.
+
+    A voter who knows the check is always ballot N can answer N carefully and coast elsewhere,
+    so a hard "force at N" trades one defect for a gaming surface. Drawing the conditional
+    probability as 1/(remaining) puts the first check at a uniformly random position in
+    1..N while still making it certain by N.
+    """
+    monkeypatch.setattr(config, "GOLD_RATE", _RUNNING_GOLD_RATE)
+    n = config.GOLD_DEADLINE
+    # Uniform placement is what the schedule's own probability gives. Since the deadline is a
+    # FLOOR under GOLD_RATE rather than a replacement for it, a rate above that floor governs
+    # instead and checks simply come more often — still guaranteed, no longer uniform. Stated
+    # here so a future config change reads as a changed regime, not a broken threshold.
+    assert config.GOLD_RATE < 1.0 / n, "rate now exceeds the schedule floor; see above"
+    conditional = []
+    for k in range(n):
+        p = 1.0 / (n - k)
+        assert integrity.should_serve_gold(k, 0, rng=lambda p=p: p - 1e-9) is True, (
+            f"ballot {k + 1} should fire below its {p:.4f} threshold"
+        )
+        if p < 1.0:
+            assert integrity.should_serve_gold(k, 0, rng=lambda p=p: p + 1e-9) is False, (
+                f"ballot {k + 1} fired above its {p:.4f} threshold — schedule is not 1/remaining"
+            )
+        conditional.append(p)
+
+    # The property those thresholds are FOR: every slot is equally likely to hold the check.
+    survive = 1.0
+    for i, p in enumerate(conditional):
+        assert abs(survive * p - 1.0 / n) < 1e-9, f"position {i + 1} is not uniform"
+        survive *= 1.0 - p
+    assert abs(survive) < 1e-9, "some probability mass escapes the window — not guaranteed"
+
+
+def test_a_measured_voter_returns_to_the_sampled_rate(monkeypatch):
+    # Once we have a reading on someone, checks go back to being occasional. Without this the
+    # deadline would fire forever and every voter would be checked every N ballots.
+    monkeypatch.setattr(config, "GOLD_RATE", _RUNNING_GOLD_RATE)
+    over = config.GOLD_RATE + 1e-9
+    assert integrity.should_serve_gold(config.GOLD_DEADLINE * 3, 1, rng=lambda: over) is False
+    under = config.GOLD_RATE - 1e-9
+    assert integrity.should_serve_gold(0, 1, rng=lambda: under) is True
+
+
+def test_a_kwise_ballot_counts_once_not_once_per_relation():
+    """A 4-up ballot resolves into K-1 pairwise rows sharing one ballot_id.
+
+    Counting comparisons naively would clock a k-wise voter three times per ballot and pull
+    their deadline forward 3x; counting only comparisons would also miss a k-wise ballot that
+    was served but never answered, since the builder writes KBallot at serve time and the
+    Comparison rows only appear on resolution.
+    """
+    from app.models import KBallot
+
+    sid = f"kwise-{uuid.uuid4().hex}"
+    with SessionLocal() as db:
+        a, b = _two_real_outputs(db)
+        cid = _overall_id(db)
+        ballot = KBallot(task_id=a.task_id, criterion_id=cid, session_id=sid)
+        db.add(ballot)
+        db.flush()
+        for _ in range(3):
+            db.add(
+                Comparison(
+                    task_id=a.task_id,
+                    output_a_id=a.id,
+                    output_b_id=b.id,
+                    criterion_id=cid,
+                    session_id=sid,
+                    ballot_id=ballot.id,
+                )
+            )
+        db.commit()
+        assert integrity.ballots_since_last_gold(db, sid) == 1
+
+
+def test_the_deadline_counter_restarts_after_a_check_is_served():
+    sid = f"restart-{uuid.uuid4().hex}"
+    with SessionLocal() as db:
+        a, b = _two_real_outputs(db)
+        cid = _overall_id(db)
+
+        def serve(is_gold: bool):
+            c = Comparison(
+                task_id=a.task_id,
+                output_a_id=a.id,
+                output_b_id=b.id,
+                criterion_id=cid,
+                session_id=sid,
+                is_gold=is_gold,
+                gold_expected="a" if is_gold else None,
+            )
+            db.add(c)
+            db.commit()
+
+        for _ in range(3):
+            serve(False)
+        assert integrity.ballots_since_last_gold(db, sid) == 3, "positive control: counter climbs"
+        serve(True)
+        assert integrity.ballots_since_last_gold(db, sid) == 0, "a served check restarts pacing"
+        serve(False)
+        serve(False)
+        assert integrity.ballots_since_last_gold(db, sid) == 2
+
+
+def test_a_session_is_certainly_checked_by_the_deadline_through_the_endpoint(monkeypatch):
+    """The property the schedule exists for, asserted through /api/next rather than in isolation.
+
+    The unit tests pin the schedule and the counter; neither proves the endpoint consults them.
+    Before this change the same walk was a coin flip: 8 ballots at GOLD_RATE=0.1 left a 43%
+    chance of finishing unmeasured, so this assertion could not have been written at all.
+
+    The payload deliberately does not say whether a ballot is gold — that would hand the voter
+    the answer — so the check is read from the comparison rows the walk left behind.
+    """
+    from app.main import SESSION_COOKIE
+
+    monkeypatch.setattr(config, "GOLD_RATE", _RUNNING_GOLD_RATE)
+
+    client = TestClient(app)
+    for _ in range(config.GOLD_DEADLINE):
+        r = client.get("/api/next?set=pair")
+        assert r.status_code == 200, r.text
+
+    sid = client.cookies.get(SESSION_COOKIE)
+    assert sid, "no session cookie was issued — harness broken, not a pass"
+    with SessionLocal() as db:
+        served = db.query(Comparison).filter(Comparison.session_id == sid).count()
+        golds = (
+            db.query(Comparison)
+            .filter(Comparison.session_id == sid, Comparison.is_gold.is_(True))
+            .count()
+        )
+    # Positive control: the walk actually produced ballots, so a zero-gold result below would
+    # mean "never checked" rather than "never served anything".
+    assert served >= config.GOLD_DEADLINE, f"only {served} ballots were served"
+    assert golds >= 1, f"{config.GOLD_DEADLINE} ballots and not one attention check"
