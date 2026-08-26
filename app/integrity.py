@@ -203,8 +203,34 @@ def note_vote(db: Session, session_id: str) -> VoterSession:
     return vs
 
 
+def gold_outcome(winner: str, expected: str | None) -> bool | None:
+    """Score one answer to an attention check. `None` means ABSTAINED — not observed at all.
+
+    A gold pair is a real output against a degenerate decoy, and it asks exactly one question:
+    can you tell them apart. `bad` ("both are bad") and `tie` answer neither yes nor no — they
+    decline to prefer, which on a pair where one mesh is genuinely poor can be the honest reply.
+    Scoring them as failures measured willingness to pick a winner instead of ability to spot the
+    decoy, and the two are not the same trait.
+
+    Measured on the 2026-08-25 recruited pilot: 10 of 12 "failures" were `bad`, only 2 were
+    picking the decoy, and 22% of that cohort's real ballots were non-binary. The largest single
+    contributor was left at trust exactly 0.500 — the admission threshold — one such answer from
+    having all 100 of their votes silently dropped from every board.
+
+    An abstention consumes nothing: the caller must not touch either counter, so the session's
+    trust is unchanged and the check can still be put to them again.
+    """
+    if winner not in ("a", "b"):
+        return None
+    return winner == expected
+
+
 def record_gold_outcome(db: Session, session_id: str, passed: bool) -> VoterSession:
-    """Update a session's trust from a gold attention-check outcome."""
+    """Update a session's trust from a gold attention-check outcome.
+
+    Call only with a decided outcome from `gold_outcome`; an abstention (None) must skip this
+    entirely, since incrementing `gold_seen` is what makes a check count against a voter.
+    """
     vs = get_or_create_session(db, session_id)
     vs.gold_seen += 1
     if passed:
