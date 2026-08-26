@@ -54,7 +54,13 @@ DEFAULT_STUDY = Path("data/study/arena-study.db")
 
 #: Columns are read from the live table and intersected with the study schema, so a column that
 #: exists on only one side never silently drops a value or explodes the insert.
-TABLES = ("comparison", "vote")
+#:
+#: `voter_session` is here because a vote without its session row cannot be interpreted: `cohort`
+#: is what separates a recruited, paid vote from an ambient one, and `trust`/gold are what let a
+#: fit weigh or exclude it. Omitting it left 33 sessions holding votes in study with no session
+#: row at all, and stranded the paid pilot's provenance as the only copy on one Fly volume.
+#: It is keyed and scoped differently from the other two — see `plan()`.
+TABLES = ("comparison", "vote", "voter_session")
 
 
 class HarvestConflict(RuntimeError):
@@ -83,6 +89,11 @@ def plan(study_path: Path, public_url: str) -> dict:
     max_vote = con.execute("select coalesce(max(id), 0) from vote").fetchone()[0]
     have_votes = {r[0] for r in con.execute("select id from vote")}
     have_comps = {r[0] for r in con.execute("select id from comparison")}
+    have_sessions = {r[0] for r in con.execute("select session_id from voter_session")}
+    # Every session holding a vote internally, not just the sessions of the votes moving in THIS
+    # run: a session harvested before this table was covered could otherwise never be backfilled,
+    # and a re-run once the votes have already landed would find nothing to do.
+    voted_sessions = {r[0] for r in con.execute("select distinct session_id from vote")}
     cols = {t: study_columns(con, t) for t in TABLES}
     con.close()
 
@@ -106,21 +117,43 @@ def plan(study_path: Path, public_url: str) -> dict:
             )
             comp_rows = [dict(r._mapping) for r in c.execute(comp_stmt, {"ids": comp_ids})]
 
+        want_sessions = sorted(
+            (voted_sessions | {r["session_id"] for r in vote_rows}) - have_sessions
+        )
+        sess_rows = []
+        if want_sessions:
+            sess_stmt = text("select * from voter_session where session_id in :ids").bindparams(
+                bindparam("ids", expanding=True)
+            )
+            sess_rows = [dict(r._mapping) for r in c.execute(sess_stmt, {"ids": want_sessions})]
+
     new_comps = [r for r in comp_rows if r["id"] not in have_comps]
     return {
         "study_max_vote_id": max_vote,
         "votes": vote_rows,
         "comparisons": new_comps,
+        "voter_sessions": sess_rows,
         "vote_collisions": sorted({r["id"] for r in vote_rows} & have_votes),
         "comparison_collisions": sorted({r["id"] for r in comp_rows} & have_comps),
         "gold_votes": sum(1 for r in comp_rows if r.get("is_gold")),
         "sessions": len({r.get("session_id") for r in vote_rows}),
+        "cohorts": sorted({str(r["cohort"]) for r in sess_rows if r.get("cohort")}),
         "columns": cols,
     }
 
 
 def apply(study_path: Path, p: dict) -> dict:
-    """Insert comparisons then votes (FK order). Caller has already snapshotted."""
+    """Insert sessions, then comparisons, then votes (FK order). Caller has already snapshotted.
+
+    Session rows are inserted with `or ignore` rather than guarded by the collision refusal that
+    protects votes and comparisons. That difference is deliberate. A vote id is a per-database
+    sequence, so the same id can name two DIFFERENT votes across two databases and overwriting
+    one would silently reattribute a real human judgement — hence the hard refusal. A session id
+    is a random 64-hex token, so a shared id is the SAME session on both sides and there is
+    nothing to misattribute; the row is only a counter snapshot. Refusing on it would mean that
+    once any session exists on both sides, every later harvest fails outright. Keeping the
+    internal row is still the rule — `or ignore` never overwrites.
+    """
     if p["vote_collisions"] or p["comparison_collisions"]:
         raise HarvestConflict(
             f"refusing to overwrite internal rows — vote ids {p['vote_collisions'][:8]}, "
@@ -129,6 +162,14 @@ def apply(study_path: Path, p: dict) -> dict:
     con = sqlite3.connect(study_path)
     try:
         con.execute("PRAGMA foreign_keys=ON")
+        for row in p.get("voter_sessions", []):
+            keep = p["columns"]["voter_session"]
+            use = [k for k in keep if k in row]
+            con.execute(
+                f"insert or ignore into voter_session ({','.join(use)}) "
+                f"values ({','.join('?' for _ in use)})",
+                [row[k] for k in use],
+            )
         for table, rows in (("comparison", p["comparisons"]), ("vote", p["votes"])):
             keep = p["columns"][table]
             for row in rows:
@@ -140,9 +181,14 @@ def apply(study_path: Path, p: dict) -> dict:
         con.commit()
         n_votes = con.execute("select count(*) from vote").fetchone()[0]
         n_comps = con.execute("select count(*) from comparison").fetchone()[0]
+        n_sess = con.execute("select count(*) from voter_session").fetchone()[0]
     finally:
         con.close()
-    return {"votes_total": n_votes, "comparisons_total": n_comps}
+    return {
+        "votes_total": n_votes,
+        "comparisons_total": n_comps,
+        "voter_sessions_total": n_sess,
+    }
 
 
 def main() -> int:
@@ -169,11 +215,18 @@ def main() -> int:
     print(f"new comparisons needed : {len(p['comparisons'])}")
     print(f"  gold among them      : {p['gold_votes']}  (attention checks; never feed rankings)")
     print(
+        f"voter sessions to add  : {len(p['voter_sessions'])}"
+        f"  cohorts={p['cohorts'] or '-'}  (provenance: cohort/trust/gold)"
+    )
+    print(
         f"pk collisions          : votes={len(p['vote_collisions'])} "
         f"comparisons={len(p['comparison_collisions'])}"
     )
 
-    if not p["votes"]:
+    # Sessions are checked too, not just votes: a backfill run has zero new votes by definition
+    # (the votes landed in an earlier harvest) and gating solely on votes would report "nothing
+    # to harvest" while the provenance for 33 sessions sat unharvested on the public instance.
+    if not p["votes"] and not p["voter_sessions"]:
         print("\nnothing to harvest — study is level with the public instance.")
         return 0
     if a.dry_run:
@@ -183,7 +236,10 @@ def main() -> int:
     snap = snapshot(study)
     print(f"\nsnapshot (sqlite3 backup API, not cp): {snap}")
     res = apply(study, p)
-    print(f"study now: votes={res['votes_total']}  comparisons={res['comparisons_total']}")
+    print(
+        f"study now: votes={res['votes_total']}  comparisons={res['comparisons_total']}"
+        f"  voter_sessions={res['voter_sessions_total']}"
+    )
     print(
         "\nNEXT: refit the boards on the INTERNAL instance "
         "(never /admin/recompute* against the public deploy — the BT bootstrap OOM-kills "
