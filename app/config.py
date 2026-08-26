@@ -131,6 +131,17 @@ TRUST_FLY_CLIENT_IP = os.environ.get("BIO3D_TRUST_FLY_CLIENT_IP", "false").lower
 GOLD_RATE = float(os.environ.get("BIO3D_GOLD_RATE", "0.1"))
 # Sessions below this trust score are excluded from the authoritative BT leaderboard.
 TRUST_THRESHOLD = float(os.environ.get("BIO3D_TRUST_THRESHOLD", "0.5"))
+# Cohorts whose votes stay in the database but never fit a published board.
+#
+# `internal` is the pre-launch corpus: the public instance came up at commit 239bce1
+# (2026-07-28 02:54 -0400), and 440 of the 849 votes predate it, so they cannot be visitor
+# traffic. 421 of those are a single session — half of every ranking published from one
+# person's judgements. They remain valuable research data and are deliberately NOT deleted;
+# this list is what keeps them out of what gets published. Clear it (BIO3D_EXCLUDED_COHORTS="")
+# to fit boards over the whole corpus for analysis.
+EXCLUDED_COHORTS = frozenset(
+    c.strip() for c in os.environ.get("BIO3D_EXCLUDED_COHORTS", "internal").split(",") if c.strip()
+)
 # Optional human-verification (captcha). Off by default so local/dev needs no keys.
 #
 # TWO keys are needed, and they are not interchangeable. The SECRET verifies a token

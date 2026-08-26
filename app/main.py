@@ -1380,9 +1380,11 @@ def api_vote(
     integrity.note_vote(db, sid)
 
     if comparison.is_gold:
-        # Attention check: update trust, do NOT feed rankings.
-        passed = vote_in.winner == comparison.gold_expected
-        integrity.record_gold_outcome(db, sid, passed)
+        # Attention check: update trust, do NOT feed rankings. A non-binary answer abstains
+        # rather than failing — see integrity.gold_outcome for why that is not the same trait.
+        outcome = integrity.gold_outcome(vote_in.winner, comparison.gold_expected)
+        if outcome is not None:
+            integrity.record_gold_outcome(db, sid, outcome)
     else:
         service.apply_vote(db, vote)
     db.commit()

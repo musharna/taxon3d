@@ -317,6 +317,34 @@ def generator_display_names(db: Session) -> dict[int, str]:
     return out
 
 
+def _published_vote_filters(criterion_id: int) -> list:
+    """The predicates deciding which votes any PUBLISHED number may be computed from.
+
+    One list, two consumers: the Bradley-Terry match set and the leaderboard's trend sparkline.
+    They used to be two hand-copied `where` clauses with a docstring on the second asserting it
+    "mirrors" the first — and they drifted the moment a third predicate was added. The cohort
+    exclusion landed on the ranking while the sparkline drawn beside it kept counting the same
+    votes, so a row would have shown a rank fitted on 409 votes next to a trend line drawn from
+    849. Sharing the list makes the mirror structural rather than aspirational; a fourth
+    predicate now reaches both by construction.
+
+    Both callers must already `outerjoin(VoterSession)` — these predicates reference it.
+    """
+    filters = [
+        Comparison.criterion_id == criterion_id,
+        Comparison.is_gold.is_(False),
+        (VoterSession.trust.is_(None)) | (VoterSession.trust >= config.TRUST_THRESHOLD),
+    ]
+    if config.EXCLUDED_COHORTS:
+        # `not_in` alone evaluates to NULL for an untagged session, which would drop every
+        # ordinary voter from the board — the opposite of the intent — so NULL is admitted
+        # explicitly.
+        filters.append(
+            (VoterSession.cohort.is_(None)) | (VoterSession.cohort.not_in(config.EXCLUDED_COHORTS))
+        )
+    return filters
+
+
 def _matches_for_scope(
     db: Session,
     criterion_id: int,
@@ -414,11 +442,7 @@ def _scope_rows(
         .outerjoin(gen_a, out_a.generator_id == gen_a.id)
         .outerjoin(gen_b, out_b.generator_id == gen_b.id)
         .outerjoin(VoterSession, VoterSession.session_id == Vote.session_id)
-        .where(
-            Comparison.criterion_id == criterion_id,
-            Comparison.is_gold.is_(False),
-            (VoterSession.trust.is_(None)) | (VoterSession.trust >= config.TRUST_THRESHOLD),
-        )
+        .where(*_published_vote_filters(criterion_id))
     )
     if verified_only:
         stmt = stmt.where(VoterSession.user_id.is_not(None))
@@ -690,7 +714,8 @@ def generator_trend_series(
     that time window (a tie splits as half a win to each side, mirroring the BT tie-credit
     convention in `_matches_for_scope`).
 
-    Mirrors `_matches_for_scope`'s scope filters (trust gate, decisive-only, gold exclusion,
+    Shares `_published_vote_filters` with `_matches_for_scope` (trust gate, cohort exclusion,
+    decisive-only, gold exclusion,
     Mode-A reference-generator exclusion, same-paradigm pairing) but keeps the vote timestamp
     instead of collapsing to a flat match list, in ONE pass over the scoped votes.
 
@@ -703,11 +728,7 @@ def generator_trend_series(
         select(Vote, Comparison)
         .join(Comparison, Vote.comparison_id == Comparison.id)
         .outerjoin(VoterSession, VoterSession.session_id == Vote.session_id)
-        .where(
-            Comparison.criterion_id == criterion_id,
-            Comparison.is_gold.is_(False),
-            (VoterSession.trust.is_(None)) | (VoterSession.trust >= config.TRUST_THRESHOLD),
-        )
+        .where(*_published_vote_filters(criterion_id))
     )
     if category_ids is not None:
         stmt = stmt.join(Task, Comparison.task_id == Task.id).where(
