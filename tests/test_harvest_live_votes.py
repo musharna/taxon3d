@@ -30,6 +30,10 @@ create table vote (
     id integer primary key, comparison_id integer references comparison(id),
     winner text, session_id text
 );
+create table voter_session (
+    session_id text primary key, trust real, gold_seen integer, gold_passed integer,
+    n_votes integer, cohort text
+);
 """
 
 
@@ -47,10 +51,11 @@ def study(tmp_path):
     return p
 
 
-def _plan(votes, comparisons, *, vote_collisions=(), comparison_collisions=()):
+def _plan(votes, comparisons, *, vote_collisions=(), comparison_collisions=(), voter_sessions=None):
     return {
         "votes": votes,
         "comparisons": comparisons,
+        "voter_sessions": list(voter_sessions or []),
         "vote_collisions": list(vote_collisions),
         "comparison_collisions": list(comparison_collisions),
         "columns": {
@@ -64,6 +69,14 @@ def _plan(votes, comparisons, *, vote_collisions=(), comparison_collisions=()):
                 "is_gold",
             ],
             "vote": ["id", "comparison_id", "winner", "session_id"],
+            "voter_session": [
+                "session_id",
+                "trust",
+                "gold_seen",
+                "gold_passed",
+                "n_votes",
+                "cohort",
+            ],
         },
     }
 
@@ -81,6 +94,17 @@ def public_sqlite(tmp_path):
     )
     con.execute(
         "insert into vote (id, comparison_id, winner, session_id) values (2, 9, 'b', 'live')"
+    )
+    # Provenance for both sessions. 'old' is the backfill case: its vote is ALREADY internal,
+    # so a harvest scoped only to new votes would never look at it — which is exactly how 33
+    # sessions ended up with votes in study and no session row.
+    con.execute(
+        "insert into voter_session (session_id, trust, gold_seen, gold_passed, n_votes, cohort) "
+        "values ('live', 0.75, 4, 3, 2, 'pilot-1')"
+    )
+    con.execute(
+        "insert into voter_session (session_id, trust, gold_seen, gold_passed, n_votes, cohort) "
+        "values ('old', 1.0, 0, 0, 1, null)"
     )
     con.commit()
     con.close()
@@ -162,6 +186,121 @@ def test_a_colliding_comparison_id_is_refused(study):
     task_id = con.execute("select task_id from comparison where id = 1").fetchone()[0]
     con.close()
     assert task_id == 7, "the pre-existing comparison was overwritten despite the refusal"
+
+
+def test_plan_carries_the_provenance_of_every_session_holding_internal_votes(study, public_sqlite):
+    """A vote without its session row cannot be interpreted.
+
+    `cohort` is what separates a recruited, paid vote from an ambient one; `trust` and the gold
+    counters are what let the fit weigh or exclude it. Harvesting the vote and leaving that
+    behind produced 33 sessions with votes in study and no session row, and left the pilot's
+    provenance sitting as the only copy on a single Fly volume.
+
+    Scope is every session with votes internally, not merely the sessions of the votes moving
+    in THIS run — otherwise a session harvested in an earlier run can never be backfilled, and
+    a re-run after the votes have landed does nothing at all.
+    """
+    p = harvest.plan(study, f"sqlite:///{public_sqlite}")
+
+    got = {r["session_id"] for r in p["voter_sessions"]}
+    assert got == {"live", "old"}, (
+        "expected provenance for the new vote's session AND a backfill for the session whose "
+        f"vote is already internal; got {got}"
+    )
+
+
+def test_plan_skips_voter_sessions_the_study_already_has(study, public_sqlite):
+    """Positive control for the test above, and the no-overwrite rule.
+
+    A session id is a random 64-hex token, so a shared id denotes the SAME session on both
+    sides — there is no misattribution risk of the kind that makes a colliding VOTE id fatal.
+    The row is a counter snapshot, so the internal one is simply kept and the public one
+    skipped. Refusing outright instead would mean that once any session exists on both sides,
+    every future harvest fails.
+    """
+    con = sqlite3.connect(study)
+    con.execute(
+        "insert into voter_session (session_id, trust, gold_seen, gold_passed, n_votes, cohort) "
+        "values ('old', 0.5, 9, 9, 99, 'already-here')"
+    )
+    con.commit()
+    con.close()
+
+    p = harvest.plan(study, f"sqlite:///{public_sqlite}")
+    got = {r["session_id"] for r in p["voter_sessions"]}
+    assert got == {"live"}, f"'old' is already internal and should not be re-planned; got {got}"
+
+
+def test_apply_inserts_voter_sessions_and_preserves_the_cohort_tag(study):
+    """The cohort tag is the whole point: without it a paid pilot vote is indistinguishable
+    from an ambient one, and the pilot cannot be analysed at all."""
+    p = _plan(
+        votes=[{"id": 2, "comparison_id": 9, "winner": "b", "session_id": "live"}],
+        comparisons=[{"id": 9, "task_id": 7, "session_id": "live", "is_gold": 0}],
+        voter_sessions=[
+            {
+                "session_id": "live",
+                "trust": 0.75,
+                "gold_seen": 4,
+                "gold_passed": 3,
+                "n_votes": 2,
+                "cohort": "pilot-1",
+            }
+        ],
+    )
+    res = harvest.apply(study, p)
+    assert res["voter_sessions_total"] == 1
+
+    con = sqlite3.connect(study)
+    row = con.execute(
+        "select trust, gold_seen, gold_passed, cohort from voter_session where session_id='live'"
+    ).fetchone()
+    con.close()
+    assert row == (0.75, 4, 3, "pilot-1")
+
+
+def test_an_existing_voter_session_is_never_overwritten(study):
+    """Negative and positive in one test: the pre-existing row must survive untouched WHILE the
+    genuinely new one still lands. Asserting only that nothing was overwritten would pass just
+    as well on a harvest that wrote nothing at all."""
+    con = sqlite3.connect(study)
+    con.execute(
+        "insert into voter_session (session_id, trust, gold_seen, gold_passed, n_votes, cohort) "
+        "values ('old', 0.5, 9, 9, 99, 'already-here')"
+    )
+    con.commit()
+    con.close()
+
+    p = _plan(
+        votes=[],
+        comparisons=[],
+        voter_sessions=[
+            {
+                "session_id": "old",
+                "trust": 0.1,
+                "gold_seen": 0,
+                "gold_passed": 0,
+                "n_votes": 0,
+                "cohort": "clobbered",
+            },
+            {
+                "session_id": "live",
+                "trust": 0.75,
+                "gold_seen": 4,
+                "gold_passed": 3,
+                "n_votes": 2,
+                "cohort": "pilot-1",
+            },
+        ],
+    )
+    harvest.apply(study, p)
+
+    con = sqlite3.connect(study)
+    old = con.execute("select trust, cohort from voter_session where session_id='old'").fetchone()
+    live = con.execute("select cohort from voter_session where session_id='live'").fetchone()
+    con.close()
+    assert old == (0.5, "already-here"), "the pre-existing session row was overwritten"
+    assert live == ("pilot-1",), "the new session row did not land"
 
 
 def test_gold_comparisons_survive_the_harvest(study):
