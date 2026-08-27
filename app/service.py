@@ -317,6 +317,12 @@ def generator_display_names(db: Session) -> dict[int, str]:
     return out
 
 
+#: Levels `_scope_rows` can build a bootstrap cluster key at. Kept beside the code that enforces
+#: it rather than beside the setting, so a new level cannot be declared without teaching the one
+#: function that has to implement it.
+_BT_CLUSTER_LEVELS = frozenset({"ballot", "voter"})
+
+
 def _published_vote_filters(criterion_id: int) -> list:
     """The predicates deciding which votes any PUBLISHED number may be computed from.
 
@@ -431,6 +437,7 @@ def _scope_rows(
             Vote.winner,
             Comparison.id,
             Comparison.ballot_id,
+            Vote.session_id,
             gen_a.id,
             gen_a.paradigm,
             gen_b.id,
@@ -459,9 +466,20 @@ def _scope_rows(
     # reordering it would silently move every published confidence interval.
     stmt = stmt.order_by(Vote.id)
 
+    level = config.BT_CLUSTER_LEVEL
+    if level not in _BT_CLUSTER_LEVELS:
+        # Falling back to the default on a typo is the worst available outcome: the operator
+        # would believe they had switched the fit while the old one kept being published.
+        raise ValueError(
+            f"BIO3D_BT_CLUSTER_LEVEL must be one of {sorted(_BT_CLUSTER_LEVELS)}, got {level!r}"
+        )
+    # Voter keys are assigned first-seen. The scan is ordered by Vote.id just above, so the
+    # assignment is deterministic for a given corpus — which the seeded bootstrap RNG requires.
+    voter_keys: dict[str, int] = {}
+
     ref_gens = mode_a_excluded_generator_ids(db)
     rows: list[tuple[int, int, str, int]] = []
-    for winner, comp_id, ballot_id, a_id, a_par, b_id, b_par in db.execute(stmt).all():
+    for winner, comp_id, ballot_id, session_id, a_id, a_par, b_id, b_par in db.execute(stmt).all():
         if winner == "bad":
             continue
         if a_id is None or b_id is None:
@@ -478,10 +496,23 @@ def _scope_rows(
             continue
         if not same_paradigm(a_par, b_par):
             continue  # never rank across paradigms
-        # Ballot-group key: comparisons derived from one K-wise ballot share ballot_id, so
-        # their bootstrap resamples move together (not independently). Native pairwise votes
-        # (ballot_id is None) each get a unique negative key — a singleton group.
-        rows.append((a_id, b_id, winner, ballot_id if ballot_id is not None else -comp_id))
+        # Bootstrap cluster key — what the resampler treats as one independent unit.
+        #
+        # BALLOT: comparisons derived from one K-wise ballot share ballot_id, so their resamples
+        # move together (not independently). Native pairwise votes (ballot_id is None) each get
+        # a unique negative key — a singleton group, and negative so it cannot collide with a
+        # kballot id.
+        #
+        # VOTER: everything one person cast is a single cluster. This SUBSUMES the ballot level
+        # rather than competing with it — a k-wise ballot's pairs are nested inside the voter who
+        # cast them, so they still move together. Vote.session_id is NOT NULL, so every vote is
+        # attributable and no fallback key is needed. See config.BT_CLUSTER_LEVEL for why the
+        # better-founded level is not the default.
+        if level == "voter":
+            gkey = voter_keys.setdefault(session_id, len(voter_keys))
+        else:
+            gkey = ballot_id if ballot_id is not None else -comp_id
+        rows.append((a_id, b_id, winner, gkey))
     return rows
 
 
