@@ -150,18 +150,29 @@ def _group_keys(db, crit) -> list[int]:
 # ------------------------------------------------------------------ the default is what ships
 
 
-def test_the_default_cluster_level_is_ballot():
+def test_the_default_cluster_level_is_voter():
     """Guards the published numbers. Changing the level moves ranks in every paradigm, so the
-    default flipping without a deliberate decision is the failure this file most cares about."""
-    assert config.BT_CLUSTER_LEVEL == "ballot"
+    default flipping without a deliberate decision is the failure this file most cares about.
+
+    Flipped ballot -> voter on 2026-08-27, on measurement rather than preference: at 62 voter
+    clusters (post wave 2) the voter-level fit costs 1.02x median CI width and moves 0 of 51 firm
+    ranks. The same comparison at 18 clusters is what kept it at `ballot` until then.
+    """
+    assert config.BT_CLUSTER_LEVEL == "voter"
 
 
-# ------------------------------------------------------------------ ballot level (today)
+# ------------------------------------------------------------------ ballot level (opt-in since 08-27)
 
 
-def test_one_voters_ballots_are_separate_clusters_at_ballot_level():
-    """The behaviour being preserved as the default — and the contrast that shows the voter
-    level below is doing something rather than being wired to nothing."""
+def test_one_voters_ballots_are_separate_clusters_at_ballot_level(monkeypatch):
+    """The contrast that shows the voter level below is doing something rather than being wired
+    to nothing.
+
+    Sets the level explicitly. It used to rely on `ballot` being the default and broke the moment
+    that flipped on 2026-08-27 — which is the correct failure: a test that reads a global default
+    is asserting the default, not the behaviour it names.
+    """
+    monkeypatch.setattr(config, "BT_CLUSTER_LEVEL", "ballot")
     with SessionLocal() as db:
         crit, task, _g1, _g2, o1, o2 = _fixture(db)
         _pairwise_vote(db, crit, task, o1, o2, f"{_PFX}-solo")

@@ -92,13 +92,24 @@ BT_BOOTSTRAP = int(os.environ.get("BIO3D_BT_BOOTSTRAP", "200"))
 #             independent of each other than a ballot's pairs are, and the 2026-08-25 pilot had
 #             one voter supplying 30% of all ballots.
 #
-# "voter" is the better-founded level and is NOT the default, because switching it moves the
-# published rank grouping in every paradigm (`bt_lower`/`bt_upper` -> `ranking.rank_by_ci`).
-# That is a methods decision to make deliberately, not a side effect of an upgrade. Set
-# BIO3D_BT_CLUSTER_LEVEL=voter and refit to see the other fit; only the intervals move, since
-# the MLE is fit on the same matches either way. Neither level can affect "firm", which is
+# "voter" is the better-founded level, and as of 2026-08-27 it is the default. It was NOT, while
+# the board rested on 18 voters: at that count a cluster bootstrap is small-sample, and switching
+# moves the published rank grouping in every paradigm (`bt_lower`/`bt_upper` ->
+# `ranking.rank_by_ci`). That is a methods decision to make on evidence, not a side effect.
+#
+# The evidence, measured after Prolific wave 2 took the board to 62 voter clusters (refit at both
+# levels on a VACUUM INTO copy, 51 firm `overall` scopes):
+#
+#     median CI width   ballot 144.6   voter 148.2   ratio 1.02x
+#     max bt_score shift  0.0          ranks moved   0 of 51        top-5 identical
+#
+# So the better-founded estimator now costs 2% interval width and moves nothing. At 18 clusters
+# the same comparison ran the other way, which is why this waited.
+#
+# Set BIO3D_BT_CLUSTER_LEVEL=ballot and refit to recover the old fit; only the intervals move,
+# since the MLE is fit on the same matches either way. Neither level can affect "firm", which is
 # `n_games >= 30` — a vote count, never a property of an interval.
-BT_CLUSTER_LEVEL = os.environ.get("BIO3D_BT_CLUSTER_LEVEL", "ballot")
+BT_CLUSTER_LEVEL = os.environ.get("BIO3D_BT_CLUSTER_LEVEL", "voter")
 
 # Evidence-scaled neutral-center prior for the VLM-JUDGE Bradley-Terry fit only
 # (the human pairwise board keeps the unpenalized MLE). The judge's K-wise ballots are
