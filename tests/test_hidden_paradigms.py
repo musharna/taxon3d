@@ -8,7 +8,34 @@ import random
 
 from app import config, service
 from app.database import SessionLocal, init_db
-from app.models import Generator, ModelOutput, Task
+from app.models import Category, Generator, ModelOutput, Task
+
+
+def _category_id(db) -> int:
+    """Get-or-create a category for fixture tasks to hang off.
+
+    This used to be a hardcoded `category_id=1`, which resolves only when some other module
+    seeded the shared temp DB first — so running this file on its own, or in a different
+    grouping, failed with a FOREIGN KEY violation instead of testing anything. What is under
+    test here is the paradigm-to-hidden mapping, which is indifferent to a task's category,
+    so any real category serves. Same get-or-create reasoning as `mk` below.
+    """
+    cat = db.query(Category).filter_by(slug="hp-cat").first()
+    if cat is None:
+        cat = Category(slug="hp-cat", name="HP Category")
+        db.add(cat)
+        db.flush()
+    return cat.id
+
+
+def _task_id(db) -> int:
+    """Get-or-create a task for fixture outputs, for the same reason as `_category_id`."""
+    t = db.query(Task).filter_by(title="hp-shared-task").first()
+    if t is None:
+        t = Task(title="hp-shared-task", prompt="p", category_id=_category_id(db))
+        db.add(t)
+        db.flush()
+    return t.id
 
 
 def _gen(db, paradigm: str) -> Generator:
@@ -16,7 +43,7 @@ def _gen(db, paradigm: str) -> Generator:
     g = Generator(slug=f"hp-{paradigm}-{r}", name=f"HP {paradigm} {r}", paradigm=paradigm)
     db.add(g)
     db.flush()
-    t = Task(title=f"t-{r}", prompt="p", category_id=1)
+    t = Task(title=f"t-{r}", prompt="p", category_id=_category_id(db))
     db.add(t)
     db.flush()
     db.add(
@@ -58,7 +85,7 @@ def test_selfhosted_recon_dups_pruned_but_instantmesh_kept():
                 db.flush()
             db.add(
                 ModelOutput(
-                    task_id=1,
+                    task_id=_task_id(db),
                     generator_id=g.id,
                     asset_path="x.glb",
                     asset_format="glb",
