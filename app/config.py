@@ -84,6 +84,22 @@ ELO_K = float(os.environ.get("BIO3D_ELO_K", "32"))
 # Number of bootstrap resamples for Bradley-Terry confidence intervals.
 BT_BOOTSTRAP = int(os.environ.get("BIO3D_BT_BOOTSTRAP", "200"))
 
+# What the Bradley-Terry bootstrap treats as one independent unit when it resamples.
+#
+#   "ballot" — the K-1 pairs of a k-wise ballot move together; each pairwise vote is its own
+#             cluster. Correct as far as it goes: those pairs really are not independent.
+#   "voter"  — every ballot one person cast moves together. A voter's ballots are no more
+#             independent of each other than a ballot's pairs are, and the 2026-08-25 pilot had
+#             one voter supplying 30% of all ballots.
+#
+# "voter" is the better-founded level and is NOT the default, because switching it moves the
+# published rank grouping in every paradigm (`bt_lower`/`bt_upper` -> `ranking.rank_by_ci`).
+# That is a methods decision to make deliberately, not a side effect of an upgrade. Set
+# BIO3D_BT_CLUSTER_LEVEL=voter and refit to see the other fit; only the intervals move, since
+# the MLE is fit on the same matches either way. Neither level can affect "firm", which is
+# `n_games >= 30` — a vote count, never a property of an interval.
+BT_CLUSTER_LEVEL = os.environ.get("BIO3D_BT_CLUSTER_LEVEL", "ballot")
+
 # Evidence-scaled neutral-center prior for the VLM-JUDGE Bradley-Terry fit only
 # (the human pairwise board keeps the unpenalized MLE). The judge's K-wise ballots are
 # same-paradigm quads, so the comparison graph is disconnected by construction and full of
