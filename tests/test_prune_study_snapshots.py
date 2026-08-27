@@ -56,6 +56,21 @@ def test_a_subset_snapshot_past_the_window_is_removed(study):
     assert [p.name for p in result["removed"]] == [old.name]
 
 
+def test_the_reclaimed_size_is_measured_before_the_files_are_gone(study):
+    """The first version summed the sizes of the removed paths AFTER unlinking them, so a real
+    run that cleared 33 snapshots and 170 MB reported '0 MB'."""
+    old = study / "arena-study.PRE-THING-20260101_000000.db"
+    _db(old, [("s1", 1)])
+    _age(old, 90)
+    size = old.stat().st_size
+    assert size > 0
+
+    result = prune.prune(study, older_than_days=30, apply=True)
+
+    assert not old.exists()
+    assert result["freed_bytes"] == size
+
+
 def test_a_snapshot_holding_a_vote_the_live_db_lacks_is_kept(study):
     """The whole point. This one is older than any window and still must survive."""
     rogue = study / "arena-study.PRE-ROGUE-20260101_000000.db"

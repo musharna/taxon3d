@@ -70,11 +70,12 @@ def prune(study_dir: Path, older_than_days: int = 30, apply: bool = False) -> di
         raise SystemExit(f"refusing to prune: cannot read the live study DB at {live}")
 
     cutoff = time.time() - older_than_days * 86400
-    out: dict[str, list[Path]] = {
+    out: dict = {
         "removed": [],
         "kept_recent": [],
         "protected": [],
         "unreadable": [],
+        "freed_bytes": 0,
     }
 
     for path in sorted(study_dir.iterdir()):
@@ -97,6 +98,9 @@ def prune(study_dir: Path, older_than_days: int = 30, apply: bool = False) -> di
             out["protected"].append(path)
             continue
 
+        # Sized BEFORE the unlink: measuring afterwards reports 0, because the files whose
+        # bytes are being counted no longer exist.
+        out["freed_bytes"] += path.stat().st_size + sum(s.stat().st_size for s in _sidecars(path))
         out["removed"].append(path)
         if apply:
             for side in _sidecars(path):
@@ -121,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
 
     result = prune(Path(args.study_dir), older_than_days=args.older_than, apply=args.apply)
 
-    freed = sum(p.stat().st_size for p in result["removed"] if p.exists()) / 1e6
+    freed = result["freed_bytes"] / 1e6
     verb = "removed" if args.apply else "would remove"
     for path in result["removed"]:
         stamp = dt.datetime.fromtimestamp(path.stat().st_mtime) if path.exists() else None
