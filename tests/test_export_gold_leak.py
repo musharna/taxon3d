@@ -9,6 +9,7 @@ import uuid
 from app.database import SessionLocal, init_db
 from app.models import Generator, ModelOutput, Task
 from app.public_export import IncludeSet, effective_provenance, filter_gold_for_posture
+from tests.factories import a_category_id
 
 
 def setup_module(_m):
@@ -23,7 +24,7 @@ def _gen(db, kind="model"):
 
 
 def _task(db):
-    t = Task(title=f"t-{uuid.uuid4().hex[:8]}", prompt="p", category_id=1)
+    t = Task(title=f"t-{uuid.uuid4().hex[:8]}", prompt="p", category_id=a_category_id(db))
     db.add(t)
     db.flush()
     return t

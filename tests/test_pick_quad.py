@@ -2,6 +2,7 @@ import uuid
 from app import matchmaking
 from app.database import SessionLocal, init_db
 from app.models import Generator, ModelOutput, Task
+from tests.factories import a_category_id
 
 
 def setup_module(_m):
@@ -9,7 +10,7 @@ def setup_module(_m):
 
 
 def _task_with(db, paradigm_counts):
-    t = Task(title=f"q-{uuid.uuid4().hex[:8]}", prompt="p", category_id=1)
+    t = Task(title=f"q-{uuid.uuid4().hex[:8]}", prompt="p", category_id=a_category_id(db))
     db.add(t)
     db.flush()
     for para, n in paradigm_counts.items():
@@ -27,7 +28,7 @@ def _task_with(db, paradigm_counts):
 def _task_with_gen_counts(db, paradigm, outputs_per_generator):
     """A task whose `paradigm` group has len(outputs_per_generator) generators, the i-th of
     which owns outputs_per_generator[i] outputs."""
-    t = Task(title=f"q-{uuid.uuid4().hex[:8]}", prompt="p", category_id=1)
+    t = Task(title=f"q-{uuid.uuid4().hex[:8]}", prompt="p", category_id=a_category_id(db))
     db.add(t)
     db.flush()
     for n in outputs_per_generator:
@@ -67,7 +68,7 @@ def test_none_when_fewer_than_four_distinct_generators():
 def test_quad_falls_through_to_group_with_four_generators():
     """A group can have >=4 outputs but <4 generators; pick_quad must skip it, not fail."""
     with SessionLocal() as db:
-        t = Task(title=f"q-{uuid.uuid4().hex[:8]}", prompt="p", category_id=1)
+        t = Task(title=f"q-{uuid.uuid4().hex[:8]}", prompt="p", category_id=a_category_id(db))
         db.add(t)
         db.flush()
         # procedural: 6 outputs / 2 generators (unqualified). text_native: 4 outputs / 4 gens.

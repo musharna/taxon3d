@@ -10,6 +10,7 @@ from app.admissibility import Verdict
 from app.config import ASSET_DIR
 from app.database import SessionLocal, init_db
 from app.models import Admissibility, Generator, ModelOutput, Task
+from tests.factories import a_category_id
 
 
 def setup_module(_m):
@@ -20,7 +21,7 @@ def _output(db, rel_asset):
     g = Generator(slug=f"st-{uuid.uuid4().hex}", name="g", kind="model", paradigm="p")
     db.add(g)
     db.flush()
-    t = Task(title=f"st-{uuid.uuid4().hex[:8]}", prompt="p", category_id=1)
+    t = Task(title=f"st-{uuid.uuid4().hex[:8]}", prompt="p", category_id=a_category_id(db))
     db.add(t)
     db.flush()
     o = ModelOutput(task_id=t.id, generator_id=g.id, asset_path=rel_asset, asset_format="glb")

@@ -14,6 +14,7 @@ from sqlalchemy import select
 from app.database import SessionLocal, init_db
 from app.main import app
 from app.models import Criterion, Generator, ModelOutput, Rating, Task
+from tests.factories import a_category_id
 
 client = TestClient(app)
 
@@ -35,7 +36,7 @@ def setup_module(_m):
             g = Generator(slug=slug, name=slug, paradigm=paradigm)
             db.add(g)
             db.flush()
-            t = Task(title=f"t-{slug}", prompt="p", category_id=1)
+            t = Task(title=f"t-{slug}", prompt="p", category_id=a_category_id(db))
             db.add(t)
             db.flush()
             db.add(
