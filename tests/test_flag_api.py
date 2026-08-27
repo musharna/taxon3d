@@ -10,6 +10,7 @@ from app import config, integrity
 from app.database import SessionLocal
 from app.main import app
 from app.models import Generator, ModelOutput, Task
+from tests.factories import a_category_id
 
 client = TestClient(app)
 
@@ -26,7 +27,7 @@ def _output():
         g = Generator(slug=f"fa-{uuid.uuid4().hex}", name="g", kind="model", paradigm="p")
         db.add(g)
         db.flush()
-        t = Task(title=f"fa-{uuid.uuid4().hex[:8]}", prompt="p", category_id=1)
+        t = Task(title=f"fa-{uuid.uuid4().hex[:8]}", prompt="p", category_id=a_category_id(db))
         db.add(t)
         db.flush()
         o = ModelOutput(task_id=t.id, generator_id=g.id, asset_path="x.glb", asset_format="glb")

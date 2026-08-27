@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.database import SessionLocal
 from app.main import app
 from app.models import Generator, ModelOutput, OutputFlag, Task, _utcnow
+from tests.factories import a_category_id
 
 client = TestClient(app)
 TOKEN = "test-token"
@@ -18,7 +19,7 @@ def _flagged_output(hidden=False):
         g = Generator(slug=f"ad-{uuid.uuid4().hex}", name="g", kind="model", paradigm="p")
         db.add(g)
         db.flush()
-        t = Task(title=f"ad-{uuid.uuid4().hex[:8]}", prompt="p", category_id=1)
+        t = Task(title=f"ad-{uuid.uuid4().hex[:8]}", prompt="p", category_id=a_category_id(db))
         db.add(t)
         db.flush()
         o = ModelOutput(

@@ -10,13 +10,14 @@ import random
 from app import service
 from app.database import SessionLocal, init_db
 from app.models import Generator, ModelOutput, Task
+from tests.factories import a_category_id
 
 
 def _gen(db, slug: str, name: str, source: str) -> Generator:
     g = Generator(slug=slug, name=name)
     db.add(g)
     db.flush()
-    t = Task(title=f"t-{random.randint(0, 10**9)}", prompt="p", category_id=1)
+    t = Task(title=f"t-{random.randint(0, 10**9)}", prompt="p", category_id=a_category_id(db))
     db.add(t)
     db.flush()
     db.add(

@@ -176,6 +176,34 @@ def overall_criterion(db) -> Criterion:
     return c
 
 
+def a_category_id(db) -> int:
+    """A Category id for a test that builds its own Task and does not care which category.
+
+    Replaces the `category_id=1` idiom. That literal resolved only when some OTHER module had
+    already seeded the shared temp DB, so the file could not be run on its own — `pytest
+    tests/test_x.py` raised "FOREIGN KEY constraint failed" from the fixture builder, before
+    reaching an assertion. It also meant the file's result depended on which other tests ran
+    first, which is not a property a test should have.
+
+    Unique per call, for the reason `make_outputs` gives for its slugs: one test's rows must
+    never be swept up by another's cleanup, and a shared category would be cascade-deleted out
+    from under whoever else was using it. Flushed rather than committed so it takes part in the
+    caller's transaction — enough for the FK check on the Task insert that follows.
+    """
+    cat = Category(slug=f"anon-{uuid.uuid4().hex[:10]}", name="Anonymous")
+    db.add(cat)
+    db.flush()
+    return cat.id
+
+
+def a_task_id(db) -> int:
+    """A Task id, for the `task_id=1` form of the same problem. See `a_category_id`."""
+    task = Task(category_id=a_category_id(db), title=f"Anon {uuid.uuid4().hex[:10]}", prompt="p")
+    db.add(task)
+    db.flush()
+    return task.id
+
+
 def mark_evaluated(db, *outputs):
     """Fill in any MISSING structural/semantic verdict for `outputs` so the gate will admit them.
 

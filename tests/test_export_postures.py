@@ -3,6 +3,7 @@ import uuid
 from app.public_export import IncludeSet, filter_include_for_posture, is_commercial_model
 from app.database import SessionLocal, init_db
 from app.models import Generator, ModelOutput, Task
+from tests.factories import a_category_id
 
 
 def setup_module(_m):
@@ -13,7 +14,7 @@ def _o(db, source, license_):
     g = Generator(slug=f"g-{uuid.uuid4().hex}", name="g", kind="model", paradigm="p")
     db.add(g)
     db.flush()
-    t = Task(title=f"t-{uuid.uuid4().hex[:8]}", prompt="p", category_id=1)
+    t = Task(title=f"t-{uuid.uuid4().hex[:8]}", prompt="p", category_id=a_category_id(db))
     db.add(t)
     db.flush()
     o = ModelOutput(

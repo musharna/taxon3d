@@ -16,6 +16,7 @@ from app.reference_provenance import (
     ReferenceProvenanceError,
     assert_recon_photos_cleared_for_gold,
 )
+from tests.factories import a_category_id
 
 
 def setup_module(_m):
@@ -30,7 +31,7 @@ def _gen(db, kind="model"):
 
 
 def _task(db):
-    t = Task(title=f"t-{uuid.uuid4().hex[:8]}", prompt="p", category_id=1)
+    t = Task(title=f"t-{uuid.uuid4().hex[:8]}", prompt="p", category_id=a_category_id(db))
     db.add(t)
     db.flush()
     return t

@@ -8,7 +8,7 @@ import pytest
 from app import admissibility, config
 from app.database import SessionLocal, init_db
 from app.models import Admissibility, Generator, ModelOutput, Task
-from tests.factories import mark_evaluated
+from tests.factories import a_category_id, mark_evaluated
 
 
 def setup_module(_m):
@@ -19,7 +19,7 @@ def _rejected_semantic_output(db):
     g = Generator(slug=f"sp-{uuid.uuid4().hex}", name="g", kind="model", paradigm="p")
     db.add(g)
     db.flush()
-    t = Task(title=f"sp-{uuid.uuid4().hex[:8]}", prompt="p", category_id=1)
+    t = Task(title=f"sp-{uuid.uuid4().hex[:8]}", prompt="p", category_id=a_category_id(db))
     db.add(t)
     db.flush()
     o = ModelOutput(task_id=t.id, generator_id=g.id, asset_path="x.glb", asset_format="glb")

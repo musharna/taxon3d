@@ -6,6 +6,7 @@ import uuid
 from app import flags
 from app.database import SessionLocal, init_db
 from app.models import Completeness, Generator, ModelOutput, Task
+from tests.factories import a_category_id
 
 
 def setup_module(_m):
@@ -16,7 +17,7 @@ def _output(db, category=None):
     g = Generator(slug=f"fg-{uuid.uuid4().hex}", name="g", kind="model", paradigm="p")
     db.add(g)
     db.flush()
-    t = Task(title=f"ft-{uuid.uuid4().hex[:8]}", prompt="p", category_id=1)
+    t = Task(title=f"ft-{uuid.uuid4().hex[:8]}", prompt="p", category_id=a_category_id(db))
     db.add(t)
     db.flush()
     o = ModelOutput(task_id=t.id, generator_id=g.id, asset_path="x.glb", asset_format="glb")

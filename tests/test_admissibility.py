@@ -8,6 +8,7 @@ import pytest
 from app import admissibility
 from app.database import SessionLocal, init_db
 from app.models import Completeness, Generator, ModelOutput, Task
+from tests.factories import a_category_id
 
 
 def setup_module(_m):
@@ -18,7 +19,7 @@ def _output_with_category(db, category):
     g = Generator(slug=f"ad-{uuid.uuid4().hex}", name="g", kind="model", paradigm="p")
     db.add(g)
     db.flush()
-    t = Task(title=f"ad-{uuid.uuid4().hex[:8]}", prompt="p", category_id=1)
+    t = Task(title=f"ad-{uuid.uuid4().hex[:8]}", prompt="p", category_id=a_category_id(db))
     db.add(t)
     db.flush()
     o = ModelOutput(task_id=t.id, generator_id=g.id, asset_path="x.glb", asset_format="glb")

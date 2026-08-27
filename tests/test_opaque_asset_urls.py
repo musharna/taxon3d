@@ -13,6 +13,7 @@ from app import config, main
 from app.database import SessionLocal, init_db
 from app.main import app
 from app.models import Category, Comparison, Criterion, Generator, ModelOutput, Task
+from tests.factories import a_category_id
 
 client = TestClient(app)
 
@@ -85,7 +86,7 @@ def test_media_route_serves_bytes_and_404s_unknown():
     dest.write_bytes(b"glTF-fake-bytes")
     try:
         with SessionLocal() as db:
-            t = Task(title=f"t-{uuid.uuid4().hex[:8]}", prompt="p", category_id=1)
+            t = Task(title=f"t-{uuid.uuid4().hex[:8]}", prompt="p", category_id=a_category_id(db))
             g = Generator(slug=f"g-{uuid.uuid4().hex[:8]}", name="g")
             db.add_all([t, g])
             db.flush()
