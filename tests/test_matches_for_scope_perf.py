@@ -200,9 +200,15 @@ def test_a_tie_carries_one_group_key_for_both_of_its_halves(db):
     assert groups[0] == groups[1], "split tie must share one bootstrap group key"
 
 
-def test_a_native_pairwise_vote_gets_its_own_singleton_group_key(db):
+def test_a_native_pairwise_vote_gets_its_own_singleton_group_key(db, monkeypatch):
     """Pairwise votes have no ballot, so each is its own group — keyed negatively off the
-    comparison id so it can never collide with a real ballot_id."""
+    comparison id so it can never collide with a real ballot_id.
+
+    Pins the level explicitly: this describes the BALLOT-level keying scheme specifically, and it
+    read the global default to get it until that default became `voter` on 2026-08-27. Voter level
+    keys off a session index instead, so the negated-id assertion is not a claim about it.
+    """
+    monkeypatch.setattr(config, "BT_CLUSTER_LEVEL", "ballot")
     crit, task, made = _scope(db, n_votes=2)
     _, groups = service._matches_for_scope(db, crit.id, category_ids={task.category_id})
     assert len(set(groups)) == 2, "pairwise votes must not share a bootstrap group"
