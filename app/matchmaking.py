@@ -11,7 +11,7 @@ import random
 from collections import defaultdict
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import aliased, Session
 
 from .models import GoldPair, ModelOutput, Task
 
@@ -110,8 +110,32 @@ def pick_task(
 
 
 def pick_gold_pair(db: Session) -> GoldPair | None:
-    """Pick a random gold attention-check pair, if any are configured."""
-    golds = db.execute(select(GoldPair)).scalars().all()
+    """Pick a random gold attention-check pair whose BOTH outputs are still servable.
+
+    Visibility is not cosmetic here. Hidden outputs 404 on /media/o/{id} (@9638b86), so a pair with
+    a hidden member cannot render, and this used to choose uniformly over every GoldPair with no
+    filter at all. Measured on live prod 2026-08-28 — three of six pairs carried a hidden output:
+
+        task 12 Zea mays   good 404  bad 404   -> two broken viewers; 75% answered "both are bad"
+        task 11 Solanum    good 200  bad 404   -> no decoy to spot, so the check is free to pass
+        task 20 Glycine    good 200  bad 404   -> same
+
+    Both directions matter. A hidden GOOD member leaves nothing to identify; a hidden DECOY leaves
+    nothing to reject, and a check anyone passes measures no attention at all. Either way the
+    ballot is consumed and the voter learns nothing about themselves.
+    """
+    good = aliased(ModelOutput)
+    bad = aliased(ModelOutput)
+    golds = (
+        db.execute(
+            select(GoldPair)
+            .join(good, good.id == GoldPair.good_output_id)
+            .join(bad, bad.id == GoldPair.bad_output_id)
+            .where(good.hidden_at.is_(None), bad.hidden_at.is_(None))
+        )
+        .scalars()
+        .all()
+    )
     return random.choice(golds) if golds else None
 
 
