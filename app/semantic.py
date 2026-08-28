@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import base64
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from . import flags
 from .admissibility import Verdict
 from .judge import JUDGE_MODEL
+from .integrity import gold_good_output_ids
 from .models import Admissibility, Generator, ModelOutput, TraitRubric
 from .sourcing import is_reference_scan, is_untextured_output
 
@@ -145,7 +146,10 @@ def enumerate_semantic_work(db: Session, generators: list[str] | None = None) ->
         tid: taxon
         for (tid, taxon) in db.execute(select(TraitRubric.task_id, TraitRubric.taxon)).all()
     }
-    q = select(ModelOutput).where(ModelOutput.is_gold.is_(False))
+    good_gold = gold_good_output_ids(db)
+    q = select(ModelOutput).where(
+        or_(ModelOutput.is_gold.is_(False), ModelOutput.id.in_(good_gold))
+    )
     if generators is not None:
         gen_ids = (
             db.execute(select(Generator.id).where(Generator.slug.in_(generators))).scalars().all()
@@ -156,16 +160,24 @@ def enumerate_semantic_work(db: Session, generators: list[str] | None = None) ->
     for out in outs:
         if out.id in have:
             continue
-        if not _is_eligible(out):
+        if not _is_eligible(out, good_gold):
             continue
         work.append({"output_id": out.id, "taxon": taxon_by_task.get(out.task_id)})
     return work
 
 
-def _is_eligible(out: ModelOutput) -> bool:
+def _is_eligible(out: ModelOutput, good_gold: set[int] | None = None) -> bool:
     """Structural's breadth minus the two kinds the semantic judge cannot fairly read: a raw
-    reference scan (renders as a point cloud) and an untextured mesh (a grey blob)."""
-    return not (out.is_gold or is_reference_scan(out.source) or is_untextured_output(out))
+    reference scan (renders as a point cloud) and an untextured mesh (a grey blob).
+
+    `is_gold` used to sit alongside those two, which was over-broad. A gold pair's GOOD member is
+    an ordinary textured mesh the judge reads fine, and its being visibly good is the very claim a
+    verdict checks — so it is eligible. Its DECOY is not: deliberately degenerate, nothing to
+    measure. See integrity.gold_good_output_ids for the shared definition.
+    """
+    if out.is_gold and out.id not in (good_gold or set()):
+        return False
+    return not (is_reference_scan(out.source) or is_untextured_output(out))
 
 
 def applicable_output_ids(db: Session) -> set[int]:
@@ -174,6 +186,9 @@ def applicable_output_ids(db: Session) -> set[int]:
     Same eligibility rule enumerate_semantic_work applies, expressed over the whole DB rather than
     over "what still needs work" — one definition serving both the scorer's queue and the
     admissibility gate's notion of a missing verdict."""
+    # No good_gold here on purpose: this is the ADMISSION set. A gold good member is scored (see
+    # enumerate_semantic_work) but never admitted, so requiring a verdict for it would fail-close
+    # an export over an asset the export does not ship.
     return {o.id for o in db.execute(select(ModelOutput)).scalars().all() if _is_eligible(o)}
 
 

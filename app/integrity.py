@@ -20,7 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import config
-from .models import Comparison, KBallot, VoterSession, Vote
+from .models import Comparison, GoldPair, KBallot, VoterSession, Vote
 
 
 class InMemoryRateLimiter:
@@ -224,6 +224,25 @@ def gold_outcome(winner: str, expected: str | None) -> bool | None:
     if winner not in ("a", "b"):
         return None
     return winner == expected
+
+
+def gold_good_output_ids(db: Session) -> set[int]:
+    """Gold outputs that must carry a quality verdict: the GOOD member of every pair.
+
+    Both members of a gold pair are `is_gold`, and both scoring predicates exempted `is_gold`
+    wholesale — so all 12 gold outputs carried zero completeness and zero admissibility rows while
+    92% of ordinary outputs were scored. Wave 2 then measured two of six good members drawing 75%
+    and 81% "both are bad", with no verdict anywhere that could have caught it.
+
+    The exemption was written for outputs the semantic judge cannot fairly read (a raw reference
+    scan, an untextured mesh). A good member is neither: it is an ordinary textured mesh whose
+    whole job is to be visibly good, which is exactly what a verdict asserts. The DECOY keeps the
+    exemption — it is deliberately degenerate, so a verdict on it measures nothing.
+
+    Single definition, three consumers (structural applicability, semantic applicability, and any
+    gate reading them). They must not drift apart.
+    """
+    return set(db.execute(select(GoldPair.good_output_id)).scalars().all())
 
 
 def ballots_since_last_gold(db: Session, session_id: str) -> int:
