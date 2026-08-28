@@ -119,7 +119,14 @@ def enumerate_structural_work(db: Session) -> list[int]:
             )
         ).all()
     }
-    return sorted(applicable_output_ids(db) - have)
+    from .integrity import gold_good_output_ids  # function-local: avoids an import cycle
+
+    # SCORING breadth, deliberately wider than the ADMISSION set above. A gold pair's good member
+    # is an ordinary textured mesh whose whole job is to be visibly good — a checkable claim, so
+    # it is queued for a verdict. It is never admitted to the corpus, so it must NOT join
+    # applicable_output_ids: gating export on it fail-closes a bundle over an asset the bundle
+    # does not contain. The decoy is queued for nothing: deliberately degenerate.
+    return sorted((applicable_output_ids(db) | gold_good_output_ids(db)) - have)
 
 
 def evaluate_outputs(db: Session, output_ids: list[int]) -> dict:
