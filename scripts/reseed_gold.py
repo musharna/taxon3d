@@ -23,6 +23,7 @@ from sqlalchemy import select  # noqa: E402
 
 from app import config  # noqa: E402
 from app.assets_gen import build_degenerate  # noqa: E402
+from app.models import _utcnow  # noqa: E402
 from app.models import (  # noqa: E402
     Admissibility,
     Completeness,
@@ -133,20 +134,38 @@ def _get_or_create_calibration_generator(db) -> Generator:
     return gen
 
 
-def reseed_gold(db, task_ids, *, build_decoy=build_degenerate) -> dict:
+def reseed_gold(db, task_ids, *, build_decoy=build_degenerate, recut: bool = False) -> dict:
     """Create one gold pair per task (good = is_gold copy of a real output, bad = decoy).
 
-    Returns counts. Idempotent: tasks with an existing GoldPair are skipped."""
+    Returns counts. Idempotent: tasks with an existing GoldPair are skipped, which is what makes
+    this safe to re-run — and is also why an improved `pick_good_output` cannot reach a pair that
+    already exists. `recut=True` is the explicit opt-in that replaces one.
+
+    A re-cut RETIRES the old gold outputs rather than deleting them: every historical `Comparison`
+    on that pair references them by output id (148 gold answers existed at the 2026-08-27 measure),
+    so deleting would orphan real votes. Hiding stops them being served while the votes still
+    resolve. The old GoldPair row itself IS deleted — leaving it beside the new one would make
+    `matchmaking.pick_gold_pair` nondeterministic for that task."""
     calib = _get_or_create_calibration_generator(db)
     asset_dir = Path(config.ASSET_DIR)
     created = skipped = 0
     detail = []
     for tid in task_ids:
         existing = db.execute(select(GoldPair).where(GoldPair.task_id == tid)).scalars().first()
-        if existing is not None:
+        if existing is not None and not recut:
             skipped += 1
             detail.append((tid, "skip: gold pair exists"))
             continue
+        if existing is not None:
+            retired = []
+            for oid in (existing.good_output_id, existing.bad_output_id):
+                old = db.get(ModelOutput, oid)
+                if old is not None and old.hidden_at is None:
+                    old.hidden_at = _utcnow()
+                    retired.append(oid)
+            db.delete(existing)
+            db.flush()
+            detail.append((tid, f"recut: retired outputs {retired}"))
         good_src = pick_good_output(db, tid)
         if good_src is None:
             skipped += 1
@@ -200,10 +219,15 @@ def main() -> int:
         default=",".join(str(t) for t in DEFAULT_TASK_IDS),
         help="comma task ids to seed gold pairs for",
     )
+    ap.add_argument(
+        "--recut",
+        action="store_true",
+        help="REPLACE existing pairs for these tasks (retires the old gold outputs, keeps history)",
+    )
     args = ap.parse_args()
     task_ids = [int(x) for x in args.tasks.split(",") if x.strip()]
     with SessionLocal() as db:
-        res = reseed_gold(db, task_ids)
+        res = reseed_gold(db, task_ids, recut=args.recut)
     for tid, msg in res["detail"]:
         print(f"  task {tid}: {msg}")
     print(f"gold reseed: created={res['created']} skipped={res['skipped']}")
