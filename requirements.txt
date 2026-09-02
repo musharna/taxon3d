@@ -12,7 +12,7 @@ SQLAlchemy==2.0.51
 Jinja2==3.1.6
 python-multipart==0.0.32
 pydantic==2.13.4
-pillow==12.2.0  # loaded at app import; also downscales reference photos for the image3d providers
+pillow==12.3.0  # loaded at app import; also downscales reference photos for the image3d providers
 # Request-reachable via POST /api/submit -> app.submissions -> app.ingest (trimesh, lazily) ->
 # app.structural (numpy). A community submission is validated in-process, so these are runtime.
 numpy==2.4.6
