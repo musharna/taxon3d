@@ -9,13 +9,13 @@
 # Volumetric (CT/MRI) conversion — app.volume_convert, imported only by scripts and tests.
 # scipy and tifffile set the project's Python floor (3.12).
 scikit-image==0.26.0
-scipy==1.18.0
+scipy==1.18.1
 nibabel==5.4.2
-tifffile==2026.6.1
+tifffile==2026.8.23
 
 # Quadric decimation backend for app.mesh_convert.to_glb(max_faces=...) — dense laser scans.
 # trimesh calls it implicitly; mesh_convert is script/test-only, so this is offline.
-fast-simplification==0.1.13
+fast-simplification==0.2.0
 
 # Scoring / judging. Neither is imported anywhere under app/ at module level: `anthropic` not at
 # all, `open_clip` only inside app.species_id's functions (reached via reference_qa <-
