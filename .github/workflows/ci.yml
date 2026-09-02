@@ -73,7 +73,7 @@ jobs:
         #
         # The key names the model rather than hashing a source file, so editing species_id.py for
         # unrelated reasons does not evict 1.7 GB and re-expose the job to the network.
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/huggingface
           key: hf-hub-ViT-L-14-laion2b_s32b_b82k-v1
