@@ -20,5 +20,5 @@ fast-simplification==0.2.0
 # Scoring / judging. Neither is imported anywhere under app/ at module level: `anthropic` not at
 # all, `open_clip` only inside app.species_id's functions (reached via reference_qa <-
 # input_verify <- scripts/verify_input_subjects.py).
-anthropic==0.112.0  # Claude vision judge caller; ANTHROPIC_API_KEY from env
+anthropic==1.2.0  # Claude vision judge caller; ANTHROPIC_API_KEY from env
 open_clip_torch==3.3.0  # CLIP/BioCLIP species-id judge; drags torch + CUDA — see above
