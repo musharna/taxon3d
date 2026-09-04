@@ -77,11 +77,14 @@ def _reset_asset_caches():
     the root it was built with on first use, so a later `monkeypatch.setattr(config,
     "ASSET_DIR", ...)` silently has no effect and the test reads someone else's fixture.
     """
-    from app import service
+    from app import integrity, service
     from app.storage import get_storage
 
     get_storage.cache_clear()
     service.reference_gallery_cache_clear()
+    # The whole suite is one client IP; the per-IP caps (votes, and since 2026-09-04 ballot
+    # requests) would otherwise saturate mid-run and turn later /api/next calls into 429s.
+    integrity.reset_rate_limits()
     yield
     get_storage.cache_clear()
     service.reference_gallery_cache_clear()

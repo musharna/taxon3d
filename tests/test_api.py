@@ -152,10 +152,15 @@ def test_kvote_reveal_labels_every_output_and_the_pick():
         out_ids = [o.id for o in outs]
         task_id = outs[0].task_id
         crit_id = _overall_criterion_id(db)
+        # A ballot is only votable by the session it was served to, so it must carry the
+        # client's own cookie session (established by any prior request).
+        client.get("/api/health")
+        sid = client.cookies.get("bio3d_session")
+        assert sid, "client has no session cookie yet"
         ballot = KBallot(
             task_id=task_id,
             criterion_id=crit_id,
-            session_id="reveal-kvote-test",
+            session_id=sid,
             output_ids_json=json.dumps(out_ids),
         )
         db.add(ballot)
