@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 from .envfile import load_env_file
@@ -128,6 +129,9 @@ VOTE_RATE_WINDOW = float(os.environ.get("BIO3D_VOTE_RATE_WINDOW", "60"))
 # clears their session cookie to reset the per-session limit. Deliberately more generous than the
 # per-session cap so NAT'd users (office/uni sharing one IP) aren't throttled as a group.
 IP_VOTE_RATE_LIMIT = int(os.environ.get("BIO3D_IP_VOTE_RATE_LIMIT", "300"))
+# Public /api/submit reads the whole upload into RAM before validating it; on a 1 GB machine an
+# uncapped body is a trivial denial of service. Community meshes are a few MB; 50 MB is generous.
+SUBMIT_MAX_BYTES = int(os.environ.get("BIO3D_SUBMIT_MAX_BYTES", str(50 * 1024 * 1024)))
 # Only trust X-Forwarded-For behind a known proxy (HF Spaces, Cloudflare) — otherwise a client
 # can spoof it to dodge the per-IP limit. Off by default → use the socket peer address.
 TRUST_FORWARDED_FOR = os.environ.get("BIO3D_TRUST_FORWARDED_FOR", "false").lower() in (
@@ -456,7 +460,11 @@ def is_safe_test_db_target(value: str | None) -> bool:
     if not value:
         return True
     low = value.lower()
-    return any(marker in low for marker in (":memory:", "/tmp/", "bio3d_test_", "test"))
+    if any(marker in low for marker in (":memory:", "/tmp/", "bio3d_test_")):
+        return True
+    # "test"/"tests" only as a whole path or filename token (bounded by / _ - . or a string
+    # end): `./test.db`, `tests/`, `test_arena.db` pass; `latest/` and `contest/` do not.
+    return re.search(r"(?:^|[/_\-.])tests?(?:$|[/_\-.])", low) is not None
 
 
 def ensure_dirs() -> None:

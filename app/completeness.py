@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import json
 
+from app import config
 from app.judge import JUDGE_MODEL
 from app.organ_inventory import TaxonInventory
 
@@ -250,7 +251,7 @@ def recon_reliability_flags(db, *, gap_threshold: float = 0.4) -> list[dict]:
             continue  # withdrawn output: not served, and may be from a since-replaced input photo
         taxon = taxon_by_task.get(out.task_id)
         pgm = paradigm_by_gen.get(out.generator_id)
-        if taxon is None or pgm not in ("image_recon", "text_native"):
+        if taxon is None or pgm not in config.ARENA_VOTE_PARADIGMS:
             continue
         scores[(taxon, pgm)].append(c.score)
 

@@ -26,14 +26,26 @@ from .models import Comparison, GoldPair, KBallot, VoterSession, Vote
 class InMemoryRateLimiter:
     """Per-process sliding-window limiter. Fine for a single worker / dev."""
 
+    #: Every this-many calls, drop keys whose window has emptied. Without it the map only ever
+    #: grew: one entry per session/IP ever seen, forever, in a process that stays up for weeks.
+    SWEEP_EVERY = 256
+
     def __init__(self) -> None:
         self._buckets: dict[str, deque[float]] = defaultdict(deque)
+        self._calls = 0
+
+    def _sweep(self, cutoff: float) -> None:
+        for k in [k for k, dq in self._buckets.items() if not dq or dq[-1] < cutoff]:
+            del self._buckets[k]
 
     def allow(self, key: str, limit: int | None = None) -> bool:
         limit = config.VOTE_RATE_LIMIT if limit is None else limit
         now = time.monotonic()
-        dq = self._buckets[key]
         cutoff = now - config.VOTE_RATE_WINDOW
+        self._calls += 1
+        if self._calls % self.SWEEP_EVERY == 0:
+            self._sweep(cutoff)
+        dq = self._buckets[key]
         while dq and dq[0] < cutoff:
             dq.popleft()
         if len(dq) >= limit:
@@ -76,6 +88,14 @@ def _limiter():
 def check_rate_limit(session_id: str) -> bool:
     """Returns True if the vote is allowed, False if over the per-session limit."""
     return _limiter().allow(session_id)
+
+
+def check_next_rate_limit(ip: str) -> bool:
+    """Per-IP cap on ballot *requests*. /api/next commits a Comparison/KBallot row per call, so
+    an anonymous crawler could grow the SQLite file on the volume without bound. Own namespace
+    (a ballot request must not spend the vote budget) and a looser cap: a voter fetches one
+    ballot per vote plus the follow-up, never more than a small multiple of the vote rate."""
+    return _limiter().allow(f"next:ip:{ip}", limit=config.IP_VOTE_RATE_LIMIT * 2)
 
 
 def check_ip_rate_limit(ip: str) -> bool:

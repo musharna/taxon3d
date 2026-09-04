@@ -647,6 +647,21 @@ def finalize_rows(rows: list[dict]) -> list[dict]:
     return rows
 
 
+#: (scope, vote watermark) -> rows. The verified board is a full Bradley-Terry refit with
+#: BT_BOOTSTRAP resamples on every request, on an uncacheable /api/ path, on one shared CPU. The
+#: fit only changes when a vote lands, so it is keyed on the vote table's (count, max id).
+_VERIFIED_BOARD_MEMO: dict[tuple, list[dict]] = {}
+_VERIFIED_BOARD_MEMO_MAX = 64
+
+
+def _vote_watermark(db: Session) -> tuple:
+    # count + max id + newest timestamp: ids are reused after a rollback (SQLite autoincrement
+    # is not monotonic across aborted transactions), the timestamp is not.
+    return tuple(
+        db.execute(select(func.count(Vote.id), func.max(Vote.id), func.max(Vote.created))).one()
+    )
+
+
 def verified_leaderboard_rows(
     db: Session,
     criterion_slug: str = "overall",
@@ -654,11 +669,41 @@ def verified_leaderboard_rows(
     *,
     category_ids: set[int] | None = None,
 ) -> list[dict]:
-    """On-demand Bradley-Terry over VERIFIED votes only (session.user_id set). Not cached.
+    """On-demand Bradley-Terry over VERIFIED votes only (session.user_id set). Memoised per
+    vote watermark (see _VERIFIED_BOARD_MEMO); callers get a fresh deep copy because
+    finalize_rows() rewrites rank/ci_* in place.
 
     category_ids, when given (a kingdom's category-id set), takes precedence over the resolved
     `category` slug — same convention as _matches_for_scope/_players_for_scope — so the
     "Verified" scope toggle stays kingdom-scoped too."""
+    import copy
+
+    key = (
+        criterion_slug,
+        category,
+        tuple(sorted(category_ids)) if category_ids is not None else None,
+        _vote_watermark(db),
+        config.BT_BOOTSTRAP,
+    )
+    hit = _VERIFIED_BOARD_MEMO.get(key)
+    if hit is not None:
+        return copy.deepcopy(hit)
+    rows = _verified_leaderboard_rows_uncached(
+        db, criterion_slug, category, category_ids=category_ids
+    )
+    if len(_VERIFIED_BOARD_MEMO) >= _VERIFIED_BOARD_MEMO_MAX:
+        _VERIFIED_BOARD_MEMO.clear()
+    _VERIFIED_BOARD_MEMO[key] = copy.deepcopy(rows)
+    return rows
+
+
+def _verified_leaderboard_rows_uncached(
+    db: Session,
+    criterion_slug: str,
+    category: str,
+    *,
+    category_ids: set[int] | None,
+) -> list[dict]:
     crit = db.execute(select(Criterion).where(Criterion.slug == criterion_slug)).scalars().first()
     if crit is None:
         return []
