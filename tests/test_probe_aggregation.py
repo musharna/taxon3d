@@ -50,3 +50,15 @@ def test_confusion_multiple_defects_are_independent_one_vs_rest_columns():
     assert set(out) == {"fruit_only", "poor_exemplar"}
     assert out["fruit_only"] == {"tp": 1, "fp": 0, "tn": 2, "fn": 0}
     assert out["poor_exemplar"] == {"tp": 1, "fp": 0, "tn": 2, "fn": 0}
+
+
+def test_bioclip_branch_imports_resolve(monkeypatch):
+    """`_render_preds` / `_photo_preds` import from app.reference_qa lazily; a name removed
+    there (SPECIES_REP_MIN went at e2982b9) only surfaced at run time. Exercise the branch."""
+    import scripts.probe_clip_bioclip as probe
+
+    monkeypatch.setattr("app.species_id.species_rep_score", lambda *a, **k: 0.9)
+    item = {"taxon": "Rosa canina", "common": "dog rose", "shown_as": "Malus domestica"}
+    assert probe._render_preds(None, b"", item, [item]) == {"pred_bioclip": "right_species"}
+    monkeypatch.setattr("app.species_id.species_rep_score", lambda *a, **k: 0.1)
+    assert probe._render_preds(None, b"", item, [item]) == {"pred_bioclip": "wrong_species"}

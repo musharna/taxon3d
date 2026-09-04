@@ -8,7 +8,8 @@ is_gold=True so they stay out of normal matchmaking + rankings.
 Unlike app.seed._seed_gold (synthetic good shape, for fresh DBs), this pairs a REAL
 high-quality output — referenced as an anonymous is_gold copy, no file duplication — against
 a degenerate-triangle decoy, so the check is maximally unambiguous (real plant vs triangle).
-Idempotent: a task that already has a GoldPair is skipped. Run with the study env set."""
+Idempotent: a task that already has a GoldPair is skipped. Dry-run by default; --apply
+writes, and the study DB additionally needs --allow-study (app.dbguard)."""
 
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ from sqlalchemy import select  # noqa: E402
 
 from app import config  # noqa: E402
 from app.assets_gen import build_degenerate  # noqa: E402
+from app.database import SessionLocal  # noqa: E402
 from app.models import _utcnow  # noqa: E402
 from app.models import (  # noqa: E402
     Admissibility,
@@ -32,11 +34,8 @@ from app.models import (  # noqa: E402
     ModelOutput,
     Task,
 )
+from app.dbguard import add_write_target_args, confirm_write_target  # noqa: E402
 from app.sourcing import is_reference_scan, is_untextured_output  # noqa: E402
-
-# Recon tasks with rich textured output sets — good variety for repeat voters.
-DEFAULT_TASK_IDS = [11, 12, 13, 19, 20, 10]
-
 
 def _vote_excluded(o: ModelOutput) -> bool:
     """Same exclusion the perceptual vote pool uses: raw scans + untextured blobs."""
@@ -211,21 +210,29 @@ def reseed_gold(db, task_ids, *, build_decoy=build_degenerate, recut: bool = Fal
 def main() -> int:
     import argparse
 
-    from app.database import SessionLocal
-
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
+        "--task-ids",
         "--tasks",
-        default=",".join(str(t) for t in DEFAULT_TASK_IDS),
-        help="comma task ids to seed gold pairs for",
+        dest="task_ids",
+        required=True,
+        help="comma task ids to seed gold pairs for. REQUIRED: the old default "
+        "[11,12,13,19,20,10] was a snapshot of one DB's ids and silently targeted the wrong "
+        "tasks anywhere else",
     )
+    add_write_target_args(ap)
     ap.add_argument(
         "--recut",
         action="store_true",
         help="REPLACE existing pairs for these tasks (retires the old gold outputs, keeps history)",
     )
     args = ap.parse_args()
-    task_ids = [int(x) for x in args.tasks.split(",") if x.strip()]
+    task_ids = [int(x) for x in args.task_ids.split(",") if x.strip()]
+    confirm_write_target(
+        args,
+        purpose=f"seed gold pairs for tasks {task_ids}"
+        + (" (RECUT: retires the existing gold outputs)" if args.recut else ""),
+    )
     with SessionLocal() as db:
         res = reseed_gold(db, task_ids, recut=args.recut)
     for tid, msg in res["detail"]:

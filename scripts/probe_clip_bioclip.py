@@ -21,7 +21,7 @@ MECHANISM DESIGN (documented here since main() is not unit-tested — only confu
                     Structurally cannot predict wrong_species/poor_exemplar (always FN there) —
                     that is itself the probe's point: composition-only signal is fruit_only-scoped.
     - pred_bioclip: BioCLIP `species_rep_score` (does this read as a clear, identifiable photo
-                    of the CLAIMED species?), thresholded at `reference_qa.SPECIES_REP_MIN`.
+                    of the CLAIMED species?), thresholded at this module's `SPECIES_REP_MIN`.
                     Below threshold -> "poor_exemplar" (BioCLIP has one scalar signal — it cannot
                     itself distinguish "wrong species" from "genuinely bad photo"; both count as
                     poor_exemplar predictions, which the confusion matrix will expose as noisy
@@ -60,6 +60,12 @@ from app.organ_inventory import inventory_for  # noqa: E402
 from app.storage import get_storage  # noqa: E402
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "docs" / "superpowers"
+
+# The binary species-representativeness gate (`reference_qa.SPECIES_REP_MIN`) was retired at
+# e2982b9 in favour of the multi-class `species_matches`; this probe is the study that compared
+# the mechanisms, so it keeps the retired threshold locally rather than importing a name that
+# no longer exists. Value unchanged from the gate (probe-tuned, Task 5).
+SPECIES_REP_MIN = 0.5
 LABELS_PATH = RESULTS_DIR / "probe_labels.json"
 
 # Composition zero-shot labels (generic CLIP): whole-organism vs isolated-organ close-up.
@@ -122,7 +128,7 @@ def _common_for(taxon: str, items: list[dict]) -> str:
 
 def _photo_preds(clip_bundle, bioclip_bundle, client, png: bytes, item: dict) -> dict:
     from app import species_id
-    from app.reference_qa import SPECIES_REP_MIN, assess_organ_coverage
+    from app.reference_qa import assess_organ_coverage
 
     preds = {}
 
@@ -150,7 +156,6 @@ def _photo_preds(clip_bundle, bioclip_bundle, client, png: bytes, item: dict) ->
 
 
 def _render_preds(bioclip_bundle, png: bytes, item: dict, all_items: list[dict]) -> dict:
-    from app.reference_qa import SPECIES_REP_MIN
     from app.species_id import species_rep_score
 
     claimed = item.get("shown_as", item["taxon"])
@@ -251,11 +256,9 @@ def main() -> int:
 
     client = None
     if any(it["domain"] == "photo" for it in items):
-        import os
+        from app.llm import anthropic_client
 
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        client = anthropic_client()
 
     records = []
     for item in items:

@@ -103,9 +103,9 @@ def main() -> int:
     note = ""
     if not heuristics_only:
         if os.environ.get("ANTHROPIC_API_KEY"):
-            import anthropic
+            from app.llm import anthropic_client
 
-            client = anthropic.Anthropic()
+            client = anthropic_client()
         else:
             heuristics_only = True
             note = "ANTHROPIC_API_KEY not set — heuristics-only run."

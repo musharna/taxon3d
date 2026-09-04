@@ -21,6 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import config  # noqa: E402
 from app.database import SessionLocal, init_db  # noqa: E402
+from app.dbguard import add_write_target_args, confirm_write_target  # noqa: E402
+from app.llm import anthropic_client  # noqa: E402
 from app.judge_render import contact_sheet_path  # noqa: E402
 from app.semantic import enumerate_semantic_work, evaluate_outputs  # noqa: E402
 
@@ -64,12 +66,9 @@ def _sheet_provider():
 
 
 def _build_client():
-    import anthropic
-
-    # Per-request timeout + retries: a stalled VLM connection was observed blocking the batch
-    # forever in poll() (the SDK's 600s default is too long). 90s + retries recovers on a fresh
-    # connection; a persistent failure raises and evaluate_outputs records it as a per-output error.
-    return anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"], timeout=90.0, max_retries=3)
+    # The 90 s per-request timeout + retries this script learned the hard way (a stalled VLM
+    # connection blocked poll() forever) now live in app.llm, so every script inherits them.
+    return anthropic_client()
 
 
 _CHUNK = 25  # commit every N outputs -> durable + resumable (a kill loses at most one chunk)
@@ -86,7 +85,9 @@ def main() -> int:
         help="only score outputs from this Generator.slug (repeatable). Each output costs a "
         "headless render + a VLM call, so scope a gate-a-new-model run to that model.",
     )
+    add_write_target_args(ap)
     args = ap.parse_args()
+    confirm_write_target(args, purpose="score semantic admissibility; upsert Admissibility rows")
     init_db()
     total = {"scored": 0, "errors": 0, "flagged": 0}
     with SessionLocal() as db:

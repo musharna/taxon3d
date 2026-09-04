@@ -16,6 +16,7 @@ from sqlalchemy import create_engine, inspect as sqla_inspect, text  # noqa: E40
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app import config  # noqa: E402
+from app.dbguard import add_write_target_args, confirm_write_target  # noqa: E402
 from app.database import Base, engine_kwargs  # noqa: E402
 from app.storage import StorageBackend, get_storage  # noqa: E402
 from scripts.export_public import EXPORT_MODELS  # noqa: E402
@@ -223,9 +224,39 @@ If you genuinely mean a local import (rebuilding a local preview from a bundle),
 --local-assets."""
 
 
+def describe_bundle_plan(bundle_dir, *, rows: bool) -> list[str]:
+    """What an import of this bundle WOULD do, table by table — the dry-run report.
+
+    Board caches are cleared wholesale before reload (see replace_board_caches), so the plan
+    says DELETE for those and merge for everything else; an operator reading a bare run sees
+    the destructive step named before deciding to pass --apply.
+    """
+    b = Path(bundle_dir)
+    lines = [f"bundle: {b}"]
+    if not rows:
+        lines.append("rows: skipped (--assets-only); blobs would be synced to storage")
+        return lines
+    rows_path = b / "rows.json"
+    if not rows_path.exists():
+        lines.append(f"  rows.json missing at {rows_path}: the import would raise")
+        return lines
+    tables = json.loads(rows_path.read_bytes())
+    for model in EXPORT_MODELS:
+        name = model.__tablename__
+        if name not in tables:
+            continue
+        n = len(tables[name])
+        if name in BOARD_CACHE_TABLES:
+            lines.append(f"  {name}: DELETE every existing row, then insert {n}")
+        else:
+            lines.append(f"  {name}: merge {n} rows by primary key")
+    return lines
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--bundle", required=True)
+    add_write_target_args(ap)
     ap.add_argument(
         "--assets-only",
         action="store_true",
@@ -248,6 +279,13 @@ def main() -> int:
     storage = get_storage()
     if not storage.remote and not a.local_assets:
         raise SystemExit(_LOCAL_STORAGE_REFUSAL.format(backend=config.STORAGE_BACKEND))
+    for line in describe_bundle_plan(a.bundle, rows=not a.assets_only):
+        print(line)
+    confirm_write_target(
+        a,
+        purpose="import the release bundle (board caches are DELETED and reloaded; "
+        "blobs are uploaded to storage)",
+    )
     counts = import_bundle(
         a.bundle,
         database_url=config.DATABASE_URL,

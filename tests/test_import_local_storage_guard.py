@@ -51,7 +51,7 @@ def calls(monkeypatch, tmp_path):
     monkeypatch.setattr(
         import_public, "import_bundle", lambda b, **kw: seen.append({"bundle": b, **kw}) or {}
     )
-    monkeypatch.setattr("sys.argv", ["import_public", "--bundle", str(tmp_path / "v9")])
+    monkeypatch.setattr("sys.argv", ["import_public", "--bundle", str(tmp_path / "v9"), "--apply"])
     return seen
 
 
@@ -72,7 +72,7 @@ def test_local_assets_flag_allows_the_deliberate_local_import(monkeypatch, tmp_p
     """Positive control: the honest local import (preview rebuild) must still work."""
     monkeypatch.setattr(import_public, "get_storage", lambda: LocalStorageBackend(tmp_path))
     monkeypatch.setattr(
-        "sys.argv", ["import_public", "--bundle", str(tmp_path / "v9"), "--local-assets"]
+        "sys.argv", ["import_public", "--bundle", str(tmp_path / "v9"), "--local-assets", "--apply"]
     )
 
     assert import_public.main() == 0

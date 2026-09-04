@@ -249,8 +249,32 @@ def test_ghostcite_verify_bare_title_not_verified(monkeypatch):
 def test_ghostcite_verify_unparseable_output_fails_loud_and_closed(capsys, monkeypatch):
     # Bad flag / crash → non-JSON stdout → fail loud (stderr) + fail closed.
     b = _fake_ghostcite(monkeypatch, stdout="usage: ghostcite ...", returncode=2)
-    assert b._ghostcite_verify("10.x/y") == {"verified": False, "retracted": False}
+    res = b._ghostcite_verify("10.x/y")
+    assert res["verified"] is False and res["retracted"] is False
+    # A tool failure must be distinguishable from a bad citation, which carries no `error`.
+    assert "exit 2" in res["error"]
     assert capsys.readouterr().err  # the failure is surfaced, not silent
+
+
+def test_ghostcite_verify_citation_verdicts_carry_no_error_field(monkeypatch):
+    """Positive control for the `error` discriminator: real verdicts do not carry it."""
+    b = _fake_ghostcite(monkeypatch, stdout=_GC_FABRICATED)
+    assert "error" not in b._ghostcite_verify("10.9999/nope")
+    b = _fake_ghostcite(monkeypatch, stdout=_GC_RETRACTED, returncode=1)
+    assert "error" not in b._ghostcite_verify("10.1016/x")
+
+
+def test_ghostcite_missing_tool_raises_instead_of_unverifying_everything(monkeypatch):
+    import pytest
+
+    import scripts.build_trait_rubrics as b
+
+    def missing(*a, **kw):
+        raise FileNotFoundError(2, "No such file or directory", "ghostcite")
+
+    monkeypatch.setattr(b._subprocess, "run", missing)
+    with pytest.raises(RuntimeError, match="ghostcite is not installed"):
+        b._ghostcite_verify("10.1038/nature11119")
 
 
 def test_live_wikidata_degrades_on_outage_but_raises_on_bad_query(capsys, monkeypatch):

@@ -1,7 +1,8 @@
 # scripts/score_structural.py
 """Backfill structural admissibility verdicts for every output lacking a current-version one.
-Pure trimesh geometry — no VLM, no browser. NEVER point BIO3D_DATABASE_URL at the study DB;
-use a copy. Usage: PYTHONPATH=. BIO3D_DATABASE_URL=sqlite:///<copy> .venv/bin/python scripts/score_structural.py"""
+Pure trimesh geometry — no VLM, no browser. Dry-run by default; --apply writes, the study DB
+needs --allow-study (app.dbguard).
+Usage: PYTHONPATH=. BIO3D_DATABASE_URL=sqlite:///<copy> .venv/bin/python scripts/score_structural.py --apply"""
 
 from __future__ import annotations
 
@@ -15,9 +16,16 @@ _sys.path.insert(0, str(_pl.Path(__file__).resolve().parent.parent))
 
 from app import structural
 from app.database import SessionLocal, init_db
+from app.dbguard import add_write_target_args, confirm_write_target
 
 
 def main() -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__)
+    add_write_target_args(ap)
+    args = ap.parse_args()
+    confirm_write_target(args, purpose="backfill structural Admissibility verdicts")
     init_db()
     with SessionLocal() as db:
         work = structural.enumerate_structural_work(db)

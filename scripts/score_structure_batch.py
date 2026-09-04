@@ -23,6 +23,7 @@ from sqlalchemy import select  # noqa: E402
 
 from app import structure_service  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
+from app.dbguard import add_write_target_args, confirm_write_target  # noqa: E402
 from app.models import ModelOutput, OrganMetric  # noqa: E402
 
 
@@ -67,7 +68,9 @@ def main() -> int:
         "--only-missing", action="store_true", help="skip outputs that already have an OrganMetric"
     )
     ap.add_argument("--max", type=int, default=None, help="cap scorer calls this run (chunking)")
+    add_write_target_args(ap)
     args = ap.parse_args()
+    confirm_write_target(args, purpose="score structure and store OrganMetric rows")
     with SessionLocal() as db:
         res = run_batch(db, only_missing=args.only_missing, max_calls=args.max)
     print(res)
