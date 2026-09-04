@@ -874,6 +874,12 @@ def _build_calibration_comparison(db: Session, session_id: str) -> dict | None:
         out_b = db.get(ModelOutput, cp.output_b_id)
         if crit is None or task is None or out_a is None or out_b is None:
             continue  # dangling pair — unusable; exclude from progress + target selection
+        if out_a.hidden_at is not None or out_b.hidden_at is not None:
+            # A hidden member is withheld at /media (see _withheld), so the ballot would show a
+            # 404 mesh — the gold bug of 2026-08-28, on the calibration path. Curated pairs are
+            # deliberately NOT run through _vote_pool_predicate (roster/texture rules are for
+            # the open pool); withholding is the one rule every serving path must share.
+            continue
         total += 1
         already = integrity.already_voted_pair(
             db, session_id, cp.output_a_id, cp.output_b_id, cp.criterion_id
@@ -1365,18 +1371,25 @@ def api_vote(
 ):
     sid = request.state.session_id
 
-    # 1. Human verification (no-op unless REQUIRE_CAPTCHA is enabled).
-    if not integrity.captcha_ok_for_session(db, sid, x_captcha_token):
-        raise HTTPException(403, "Captcha verification required/failed")
-    # 2. Rate limiting — per session AND per IP (the IP layer caps cookie-reset farming).
+    # 1. Rate limiting — per session AND per IP (the IP layer caps cookie-reset farming).
+    #    Cheapest check first: the captcha gate below may make a blocking siteverify call,
+    #    so it must never be reachable by a request the limiter would have refused.
     if not integrity.check_rate_limit(sid):
         raise HTTPException(429, "Rate limit exceeded — slow down")
     if not integrity.check_ip_rate_limit(request.state.client_ip):
         raise HTTPException(429, "Rate limit exceeded — slow down")
+    # 2. Human verification (no-op unless REQUIRE_CAPTCHA is enabled).
+    if not integrity.captcha_ok_for_session(db, sid, x_captcha_token):
+        raise HTTPException(403, "Captcha verification required/failed")
 
     comparison = db.get(Comparison, vote_in.comparison_id)
     if comparison is None:
         raise HTTPException(404, "Unknown comparison")
+    if comparison.session_id != sid:
+        # Ballots are served to ONE session. Ids are sequential, so without this a script
+        # could consume other voters' ballots and have its gold answers scored against the
+        # wrong session.
+        raise HTTPException(403, "Comparison was not served to this session")
     if comparison.vote is not None:
         raise HTTPException(409, "Comparison already voted")
     # 3. Dedup: a session may not re-vote the same (non-gold) pairing.
@@ -1435,15 +1448,18 @@ def api_kvote(
     import json as _json
 
     sid = request.state.session_id
-    if not integrity.captcha_ok_for_session(db, sid, x_captcha_token):
-        raise HTTPException(403, "Captcha verification required/failed")
+    # Limiter first, captcha second — same order and reason as /api/vote.
     if not integrity.check_rate_limit(sid):
         raise HTTPException(429, "Rate limit exceeded — slow down")
     if not integrity.check_ip_rate_limit(request.state.client_ip):
         raise HTTPException(429, "Rate limit exceeded — slow down")
+    if not integrity.captcha_ok_for_session(db, sid, x_captcha_token):
+        raise HTTPException(403, "Captcha verification required/failed")
     ballot = db.get(KBallot, kvote_in.ballot_id)
     if ballot is None:
         raise HTTPException(404, "Unknown ballot")
+    if ballot.session_id != sid:
+        raise HTTPException(403, "Ballot was not served to this session")
     if ballot.resolved:
         raise HTTPException(409, "Ballot already resolved")
     ids = _json.loads(ballot.output_ids_json)
