@@ -97,10 +97,12 @@ fidelity, not taste.
 ## Architecture
 
 Single FastAPI app, server-rendered (Jinja2) + vanilla JS, SQLAlchemy over SQLite
-(dev) or Postgres (deployed), 3D rendered client-side. One Docker container; asset
-blobs on local disk or S3-compatible object storage. The live instance runs on
-Fly.io with Neon Postgres and Cloudflare R2 — see [`deploy/README.md`](deploy/README.md)
-for the full design (data model, ranking methodology, deployment, roadmap).
+(dev and deployed; Postgres is supported but no longer used), 3D rendered client-side.
+One Docker container; asset blobs on local disk or S3-compatible object storage. The
+live instance runs on Fly.io with a SQLite file on a Fly volume (it ran on Neon Postgres
+until 2026-08-09, when metered egress took the site down), Cloudflare R2 for assets and
+Cloudflare in front for edge caching — see [`deploy/README.md`](deploy/README.md) and
+[`docs/cloudflare-runbook.md`](docs/cloudflare-runbook.md).
 
 ```
 app/
@@ -216,14 +218,14 @@ rejected token leaves the session unverified, so the next vote is challenged aga
 Each seam is a config switch; the core app stays dependency-free until you enable
 one. `pip install -r requirements-scale.txt` for the backends you turn on.
 
-| Variable                                       | Purpose                                                    |
-| ---------------------------------------------- | ---------------------------------------------------------- |
-| `BIO3D_DATABASE_URL`                           | `postgresql+psycopg://…` → pooled engine (`pool_pre_ping`) |
-| `BIO3D_DB_POOL_SIZE` / `BIO3D_DB_MAX_OVERFLOW` | connection pool sizing (non-SQLite)                        |
-| `BIO3D_STORAGE_BACKEND`                        | `local` (default) or `s3` (object storage)                 |
-| `BIO3D_S3_BUCKET` / `BIO3D_S3_PREFIX`          | bucket + key prefix for the S3 backend                     |
-| `BIO3D_S3_PUBLIC_BASE_URL`                     | serve assets via a CDN domain instead of presigned URLs    |
-| `BIO3D_REDIS_URL`                              | `redis://…` → rate limiting shared across workers          |
+| Variable                                       | Purpose                                                                       |
+| ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| `BIO3D_DATABASE_URL`                           | `sqlite:////data/arena.db` (prod) or `postgresql+psycopg://…` → pooled engine |
+| `BIO3D_DB_POOL_SIZE` / `BIO3D_DB_MAX_OVERFLOW` | connection pool sizing (non-SQLite)                                           |
+| `BIO3D_STORAGE_BACKEND`                        | `local` (default) or `s3` (object storage)                                    |
+| `BIO3D_S3_BUCKET` / `BIO3D_S3_PREFIX`          | bucket + key prefix for the S3 backend                                        |
+| `BIO3D_S3_PUBLIC_BASE_URL`                     | serve assets via a CDN domain instead of presigned URLs                       |
+| `BIO3D_REDIS_URL`                              | `redis://…` → rate limiting shared across workers                             |
 
 Storage (`app/storage.py`) abstracts asset blobs behind a `StorageBackend`
 (local filesystem or S3, lazy `boto3`); the DB engine adds a real connection pool
@@ -236,9 +238,14 @@ need live infra to exercise end-to-end.
 ## Docker
 
 ```bash
-docker build -t bio3d-arena .
-docker run -p 8000:8000 -e BIO3D_ADMIN_TOKEN=... -v $PWD/data:/data bio3d-arena
+docker build -t taxon3d .
+docker run -p 8000:8000 -e BIO3D_ADMIN_TOKEN=... -v $PWD/data:/data taxon3d
 ```
+
+The image runs as the unprivileged `app` user (uid 10001), so a bind-mounted `data/` must be
+writable by that uid (`chown -R 10001 data` or `chmod -R a+rwX data`); the same applies to the
+Fly volume — see the Dockerfile. CI builds the image on every push, so a broken Dockerfile fails
+there rather than at `flyctl deploy`.
 
 ## Tests
 

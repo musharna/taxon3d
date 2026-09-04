@@ -95,12 +95,21 @@ needs. Both are pinned in `requirements-scale.txt`; install from there on the re
 
 ### Then import
 
-Load the public env (see `deploy/.env.public.example`) and import:
+Point the importer at the database it should write and import. `scripts/import_public.py` reads
+`config.DATABASE_URL`, i.e. the `BIO3D_DATABASE_URL` environment variable (default:
+`sqlite:///<repo>/data/arena.db`, the local dev DB). **Do not `export` the contents of
+`deploy/.env.public.example`** — its `BIO3D_DATABASE_URL` is the path _inside the Fly machine_
+(`sqlite:////data/arena.db`), which on the release machine either does not exist or is the wrong
+file; and a sourced dev env would silently point the importer at study or preview. Set it
+explicitly, to a throwaway build file:
 
 ```bash
-export $(grep -v '^#' deploy/.env.public.example | xargs)  # or your host's secret-store equivalent
+export BIO3D_DATABASE_URL="sqlite:///$PWD/build.db"   # NOT study, NOT preview, NOT the example's value
 python -m scripts.import_public --bundle public_bundle/v1
 ```
+
+That build file is what gets uploaded to production — see "Rebuilding the production database
+from a bundle" below for the rest of the sequence.
 
 Import verifies bundle checksums and fails loud on mismatch — do not proceed on a
 partial or corrupted transfer. It also refuses to run against local storage unless you pass
@@ -256,6 +265,69 @@ So **votes cast in production are the only copy until they are harvested into
 the backup. Harvest first, then export — a bundle built from an unharvested study DB silently
 publishes a leaderboard fitted on fewer votes than exist.
 
+### Harvest before every release
+
+This is THE procedure. `scripts/harvest_live_votes.py` takes a database URL and cannot reach a
+file on a Fly volume, so the pull comes first (this was discovered on 2026-08-26 with 16 days
+of votes — the entire paid pilot — sitting on one volume as the only copy).
+
+```bash
+# 1. Pull a consistent snapshot: VACUUM INTO on the machine (never `cp`/`sftp get` the live
+#    file — WAL), sftp it down, integrity-check it, print counts + sha256. Refuses to overwrite.
+scripts/pull_prod_db.sh                 # -> data/prod-pulls/arena.<UTC stamp>.db
+
+# 2. Harvest from the pulled file. `env -u` so a sourced deploy env cannot make the script read
+#    the wrong side; BIO3D_PUBLIC_DATABASE_URL is the pulled file, study is the default target.
+env -u BIO3D_DATABASE_URL -u BIO3D_DB_PATH \
+  BIO3D_PUBLIC_DATABASE_URL="sqlite:///$PWD/data/prod-pulls/arena.<stamp>.db" \
+  python scripts/harvest_live_votes.py --dry-run
+# same command with --apply  (snapshots study via sqlite3.backup first, prints the path)
+
+# 3. Refit on the internal instance — BOTH halves (scripts/refit_boards.py). Never
+#    /admin/recompute against the public deploy.
+```
+
+**Verify the id-overlap premise before `--apply`, every time.** The harvest moves only rows with
+`id > study's max id`, which silently assumes every id present on both sides names the same row.
+Prod and study id ranges overlap (they are independent sequences), so check that (a) shared ids
+agree and (b) no prod-only id lies below study's max. The script does **not** check this for
+you (`harvest_live_votes.py` only refuses on a primary-key collision at insert time); run it by
+hand — on 2026-07-31 one shared id disagreed, on 2026-08-26 none did:
+
+```bash
+python - data/prod-pulls/arena.<stamp>.db <<'PY'
+import sqlite3, sys
+c = sqlite3.connect("file:data/study/arena-study.db?mode=ro", uri=True)
+c.execute("ATTACH ? AS prod", (f"file:{sys.argv[1]}?mode=ro",))
+(study_max,) = c.execute("SELECT max(id) FROM vote").fetchone()
+cols = "id, comparison_id, winner, session_id, created"
+print("shared ids that DISAGREE:", c.execute(f"""
+  SELECT count(*) FROM (SELECT {cols} FROM prod.vote WHERE id <= ?
+  EXCEPT SELECT {cols} FROM vote)""", (study_max,)).fetchone()[0])
+print("prod-only ids BELOW study max (would be dropped):", c.execute(
+  "SELECT count(*) FROM prod.vote WHERE id <= ? AND id NOT IN (SELECT id FROM vote)",
+  (study_max,)).fetchone()[0])
+PY
+```
+
+Both must print 0 (adjust `cols` to the live `vote` schema if it has moved). A mismatch would
+attribute one voter's judgement to another.
+
+The script reads the app name from `fly.toml`, runs `VACUUM INTO /data/pull-<stamp>.db` via
+`flyctl ssh console -C`, `sftp get`s it, removes the remote temp file, and checks every `flyctl`
+exit code. `flyctl` lives in `~/.fly/bin`, which the script adds to `PATH`.
+
+### Backup
+
+**The pull script is the backup.** Fly's volume snapshots are daily with 5-day retention and
+there is no replica, so anything older than five days that was never pulled is unrecoverable if
+the volume is lost. `data/prod-pulls/` is gitignored (`/data/`), so pulls live only on the
+machine that pulled them — keep them somewhere durable too.
+
+Cadence: **weekly while traffic is ambient, and the same day any recruited wave completes**
+(paid votes are 15 specific strangers' judgements and cannot be re-collected at any price).
+Always before a release, and before any `sftp put` onto the volume (next section).
+
 ### Rebuilding the production database from a bundle
 
 The importer writes to whatever `BIO3D_DATABASE_URL` points at, so build the file locally and
@@ -265,15 +337,32 @@ upload it rather than importing across the network:
 export BIO3D_DATABASE_URL="sqlite:///$PWD/build.db"   # NOT study, NOT preview
 python -m scripts.import_public --bundle public_bundle/vN   # rows in; blobs already in R2 are skipped
 python -c "import sqlite3; c=sqlite3.connect('build.db'); c.execute('PRAGMA wal_checkpoint(TRUNCATE)'); c.execute('VACUUM INTO ?', ('arena.db',))"
-fly ssh sftp put arena.db /data/arena.db --app bio3d-arena
-fly secrets set BIO3D_DATABASE_URL="sqlite:////data/arena.db" --app bio3d-arena   # restarts onto it
 ```
 
-`VACUUM INTO` is what makes the uploaded file a single consistent snapshot — copying a live WAL
-database with `cp` drops whatever is still in the `-wal`, which is how 80 rescued votes were
-lost on 2026-07-26. Verify the upload with `sha256sum` on both ends before flipping the secret,
-and flip it **last**: while the secret still points elsewhere, nothing holds `/data/arena.db`
-open, so the upload cannot race a running reader.
+**Before the `put`: pull and diff first, then stop the app.** Since 2026-08-09 the secret
+already points at `/data/arena.db`, so the app holds that file open and `sftp put` would land
+on a live WAL database. Two things go wrong: votes cast between your pull and the put exist
+nowhere else, and a stale `-wal`/`-shm` left beside the replaced main file is replayed on the
+next open, producing a mixed database (this is exactly the 2026-06-28 study-DB incident). So:
+
+```bash
+scripts/pull_prod_db.sh                                # 1. pull (see "Harvest before every release")
+#    ...harvest it, then confirm build.db contains every vote the pull does (compare max(vote.id)
+#    and count(*) on vote/comparison/voter_session; the pull script prints them). Only then:
+flyctl machine list -a bio3d-arena                     # 2. find the machine id
+flyctl machine stop <id> -a bio3d-arena                # 3. stop the app: nothing may hold the file open
+flyctl ssh console -a bio3d-arena -C "rm -f /data/arena.db-wal /data/arena.db-shm"   # 4. no stale WAL
+flyctl ssh sftp put arena.db /data/arena.db -a bio3d-arena   # 5. put (the DB is owned by uid 10001 — see the Dockerfile)
+flyctl ssh console -a bio3d-arena -C "sha256sum /data/arena.db"    # 6. compare with `sha256sum arena.db` locally
+flyctl machine start <id> -a bio3d-arena               # 7. restart; then /readyz must say database: ok
+```
+
+Fly's proxy can auto-start a stopped machine on an incoming request (`auto_start_machines`), so
+do steps 3–5 back to back and re-check `flyctl machine status <id>` before the put. `VACUUM INTO`
+is what makes the uploaded file a single consistent snapshot — copying a live WAL database with
+`cp` drops whatever is still in the `-wal`, which is how 80 rescued votes were lost on
+2026-07-26. Note that the machine's console runs the app image, so `sha256sum` and `python3` are
+available there but the `sqlite3` CLI is not.
 
 ## Free-tier hosting targets
 
@@ -284,12 +373,14 @@ open, so the upload cannot race a running reader.
   site that wants crawler traffic
 - **Assets (S3-compatible)**: Cloudflare R2
 
-The live deployment uses Fly (`fly.toml`, committed) + a Fly volume + R2. **Cloudflare fronts
-the assets only — the apex domain resolves straight to Fly, so nothing caches the HTML today.**
-The `Cache-Control: s-maxage` headers the app sets are therefore correct but currently
-unenforced; they start working the moment a CDN is put in front, and they are not what protects
-the database (the volume is). Two settings are easy to get wrong and are worth repeating for any
-other host:
+The live deployment uses Fly (`fly.toml`, committed) + a Fly volume + R2, with **Cloudflare
+proxying the apex domain since 2026-08-20**: meshes are edge-cached by one Cache Rule and public
+HTML by a second (2026-08-21, commit `0e4bf6c`), so the `Cache-Control: s-maxage` headers the app
+sets are now enforced at the edge. The edge is not what protects the database (the volume is),
+and Cloudflare rewrites the browser `max-age` zone-wide — both are written up in
+`docs/cloudflare-runbook.md`, which is the record of the flip and of the two faults that made a
+correct-looking setup cache nothing. Two settings are easy to get wrong and are worth repeating
+for any other host:
 
 - **Trust the proxy's forwarded-for header** (`BIO3D_TRUST_FORWARDED_FOR=true` on Fly). Any
   platform that terminates TLS at an edge makes every request appear to come from the proxy.

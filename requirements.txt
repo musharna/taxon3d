@@ -17,3 +17,7 @@ pillow==12.3.0  # loaded at app import; also downscales reference photos for the
 # app.structural (numpy). A community submission is validated in-process, so these are runtime.
 numpy==2.5.2
 trimesh==5.0.0
+# Imported at module top level by app/recon_client.py, app/image3d.py and app/client.py. Until
+# 2026-09-04 it was pinned only in requirements-dev.txt, so the Docker image (runtime + scale)
+# lacked it; tests/test_runtime_deps.py now scans app/*.py for exactly this class of gap.
+httpx==0.28.1

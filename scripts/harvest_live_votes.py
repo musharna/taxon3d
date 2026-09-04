@@ -3,8 +3,11 @@
 
 Why this has to exist as a standing step, not a one-off rescue:
 
-Every vote a real visitor casts on taxon3d.org lands in the public Postgres and nowhere
-else. The internal study DB is the source of truth the leaderboards are FITTED on, and the export
+Every vote a real visitor casts on taxon3d.org lands in the production SQLite file on the Fly
+volume (`/data/arena.db` since 2026-08-09; managed Postgres before that) and nowhere else. This
+script cannot reach that volume: `scripts/pull_prod_db.sh` first pulls a `VACUUM INTO` copy to
+`data/prod-pulls/`, and this script is pointed at the pulled file (deploy/README.md, "Harvest
+before every release"). The internal study DB is the source of truth the leaderboards are FITTED on, and the export
 promotes those fitted boards outward. So the moment the public site takes a vote, the two
 databases diverge, and every subsequent release publishes rankings computed without the newest
 real human input — while vote volume is the single thing bottlenecking every board.

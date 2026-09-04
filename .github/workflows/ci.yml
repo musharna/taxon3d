@@ -85,6 +85,29 @@ jobs:
         run: |
           env -u BIO3D_DATABASE_URL -u BIO3D_DB_PATH python -m pytest -q
 
+  # The image is what actually ships (fly.toml [build] dockerfile = "Dockerfile"), and until now
+  # nothing built it before `flyctl deploy` did — so a broken COPY, a bad base-image digest or a
+  # requirements pin that does not resolve surfaced only at deploy time, on the remote builder.
+  # Build it here, then prove the two things the Dockerfile promises: it does not run as root,
+  # and the runtime + scale dependencies it installs actually import.
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t taxon3d-ci .
+      - name: The container does not run as root
+        run: |
+          uid="$(docker run --rm taxon3d-ci id -u)"
+          echo "uid=$uid"
+          test "$uid" = "10001"
+      - name: Runtime and scale dependencies import inside the image
+        # httpx sits at the top of app/recon_client.py and friends; boto3 backs the S3 storage;
+        # psycopg is the Postgres driver. Any of these missing is a ModuleNotFoundError in
+        # production and nowhere else.
+        run: docker run --rm taxon3d-ci python -c "import fastapi, sqlalchemy, httpx, trimesh, boto3, psycopg, redis; print('ok')"
+
   # Guards that only fail on a PUBLIC deploy, which no other job exercises: the app must refuse
   # to boot without an admin token or a public base URL. These are import-time RuntimeErrors, so
   # a plain `python -c "import app.config"` is the whole test.

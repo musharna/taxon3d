@@ -8,12 +8,67 @@ design spec (internal).
 
 ## [Unreleased]
 
+Backfilled 2026-09-04 from `git log v0.1.0..HEAD` (67 commits). Short shas; PR numbers where one
+exists.
+
+### Infrastructure
+
+- Database moved off managed Postgres (Neon) onto a SQLite file on a Fly volume, after a
+  447-page crawl exhausted the egress quota and took the site down — `5925e58` (#159); the
+  outage itself hardened first: DB init no longer fatal at import, public HTML cacheable —
+  `7dc3f0a` (#158).
+- Cloudflare now fronts the site: proxy + mesh Cache Rule `dd7df3b` (#170), `d2907e0`; public
+  HTML edge-cached and the zone-wide `max-age` rewrite documented `0e4bf6c`.
+- Vote harvest rewritten to read the pulled SQLite file, not a Postgres URL — `6823349` (#163);
+  `voter_session` (cohort, trust, gold) harvested too — `90b393e`.
+- Repo made safe to be public: 4 GB of meshes can no longer be committed `2590496` (#169);
+  private planning docs and absolute paths scrubbed `2afb2e5`, `5a86dff`; formatter pinned to
+  what CI checks `4dcfb45` (#168), `193bc2f`; every test file runnable alone `ee8e50b`.
+
+### Corpus and gates
+
+- Gate fails closed: an output nobody judged is not admitted — `8759c3e` (#167); the judge now
+  scores post-fix meshes only — `0c49886` (#162).
+- Hidden outputs are no longer served (`f42921f`, #165) nor exported (`c707d16`, `a733421`).
+- Stale recon inputs: the three-photo mushroom task and 94 outputs hidden — `52c3546` (#161);
+  pine sapling/mature mismatch `91b6ba3` (#164); re-running one model no longer re-pays for
+  twelve `b65dff5` (#166).
+- Reference photos: unjudged photos no longer pass — `5bcb21b` (#147); a model's own input can
+  no longer appear as a reference — `f3acfde` (#151).
+- LOD: tier is a ballot property, not a per-model one — `aeabcd8` (#148); meshes without an
+  LOD were refused, not missed — `546e9c9` (#149); coverage framing corrected `6835af6` (#150),
+  `16c2b8f`.
+
+### Ballot and ranking
+
+- Pairwise ballot restored as the default (4-up was 1.5x information per mesh, not 3x) —
+  `9fcf1a5` (#156); viewport and layout fixes `a788434` (#152), `9b3aab3` (#153), `ee92b9d`
+  (#154), `4ee95a8` (#157), `bd7d7ff` (#160).
+- Bootstrap can resample at the voter level (a switch; default unchanged) — `2e48642`,
+  `dd52ad4`; most-compared is not a quality signal — `9d8698d`.
+- Gold attention checks: "both bad" no longer fails — `d1d9d9b`; every paid voter gets one —
+  `71b5ccc`; a gold "good" mesh is now checked — `1e003cd`; 404 gold meshes re-cut — `f9270b6`;
+  `reseed_gold` can update an existing pair — `a4e8731`.
+- Recruited voting (Prolific waves 1–2): cohort tag `08293b6`, completion code `adcaffe`,
+  frozen counter fixed `37b4c2f`, scheduler analysis `fee9dd2`.
+
+### Dataset
+
+- Hugging Face dataset export (`musharna/taxon3d-corpus-v1`, private): redistribute gate chain,
+  five tables with gold columns absent, byte-for-byte originals, card — `eddde3c` … `bc3c5ce`;
+  card numbers corrected `feeb7e6`; token precedence `84bb470`; viewer configs `5710181`;
+  `/dataset` links the data, not the page about it `334c13c`.
+- DOI badge and ballot description — `378d569` (#145), `6bb849d` (#146).
+- Study-DB snapshot pruning reports size first and never deletes on age alone — `f2b0e41`,
+  `018bfe0`.
+
 ## [0.1.0] - 2026-08-04
 
 First tagged release, and the first archived on Zenodo. It is cut here because the project's
 name is now settled — a DOI freezes the name into the citation record, so the rename had to land
-first. The benchmark itself is early: the leaderboard deliberately ranks nobody, because no
-generator yet has enough comparisons to rank honestly.
+first. The benchmark itself is early: at this tag 53 generators carried a rating but only 4 had
+enough comparisons for a firm rank (an earlier draft of this note said the board "ranks nobody",
+which was wrong — see `6bb849d`, #146).
 
 ### Changed
 

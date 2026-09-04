@@ -223,9 +223,9 @@ everyone who received that cached mesh afterwards, collapsing vote dedup and the
 accounting onto a single identity. Keep the responses cookie-free instead.
 
 Note the HTML row too — `s-maxage=300` on a public page buys nothing without a Cache Rule making
-HTML eligible, so the crawler protection added after the Neon outage is not actually active at the
-edge. Lower stakes now that prod is on a Fly volume rather than Neon, but it is not doing what its
-comment claims. **Still open.**
+HTML eligible, so on 2026-08-20 the crawler protection added after the Neon outage was not yet
+active at the edge. **CLOSED 2026-08-21** by the second Cache Rule in "Steps C" below (commit
+`0e4bf6c`); public HTML now `HIT`s.
 
 ### An UNNAMED Cache Rule is never deployed, and looks exactly like a correct one
 
