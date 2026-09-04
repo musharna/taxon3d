@@ -1,6 +1,7 @@
 """Pytest bootstrap: isolate the test DB + assets into a temp dir before app import."""
 
 import os
+import re
 import sys
 import shutil
 import tempfile
@@ -17,10 +18,21 @@ def _is_safe_test_db_target(value: str | None) -> bool:
     if not value:
         return True
     low = value.lower()
-    return any(m in low for m in (":memory:", "/tmp/", "bio3d_test_", "test"))
+    if any(marker in low for marker in (":memory:", "/tmp/", "bio3d_test_")):
+        return True
+    # "test"/"tests" only as a whole path or filename token (bounded by / _ - . or a string
+    # end): `./test.db`, `tests/`, `test_arena.db` pass; `latest/` and `contest/` do not.
+    return re.search(r"(?:^|[/_\-.])tests?(?:$|[/_\-.])", low) is not None
 
 
-for _var in ("BIO3D_DATABASE_URL", "BIO3D_DB_PATH"):
+# Guard exactly the variables that choose the database — the same set app.envfile refuses to
+# take from a .env. BIO3D_DATA_DIR belongs here because app.config derives DB_PATH from it.
+# app.envfile is stdlib-only and app/__init__.py imports nothing, so this does NOT freeze config.
+from app.envfile import DB_DESTINATION_VARS  # noqa: E402
+
+GUARDED_DB_VARS = tuple(sorted(DB_DESTINATION_VARS))
+
+for _var in GUARDED_DB_VARS:
     _val = os.environ.get(_var)
     if not _is_safe_test_db_target(_val):
         sys.stderr.write(

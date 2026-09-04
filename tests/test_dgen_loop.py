@@ -64,7 +64,7 @@ def test_select_best_prefers_fidelity_then_complete_then_earliest():
     assert _select_best([{"round": 0, "status": "error", "comp_cat": "", "score": None}]) is None
 
 
-def test_loop_plateau_stops_and_promotes_best():
+def test_loop_plateau_stops_and_promotes_best(tmp_path):
     with SessionLocal() as db:
         task_id, run_id = _seed(db, "Zea mays")
         db.commit()
@@ -83,7 +83,7 @@ def test_loop_plateau_stops_and_promotes_best():
             complete_fn=lambda m, p: "import bpy",
             run_fn=_run_fn_ok,
             score_fn=lambda g: _score(next(fids)),
-            asset_dir="/tmp/dgen_test_assets",
+            asset_dir=str(tmp_path),
             max_rounds=3,
         )
         db.commit()
@@ -133,7 +133,7 @@ def test_refine_loop_persists_round0_baseline_glb(tmp_path):
         assert baseline.exists()
 
 
-def test_loop_repairs_failed_round():
+def test_loop_repairs_failed_round(tmp_path):
     with SessionLocal() as db:
         task_id, run_id = _seed(db, "Rosa")
         db.commit()
@@ -167,7 +167,7 @@ def test_loop_repairs_failed_round():
             complete_fn=lambda m, p: "import bpy",
             run_fn=run_fn_then_ok,
             score_fn=lambda g: _score(0.7),
-            asset_dir="/tmp/dgen_test_assets",
+            asset_dir=str(tmp_path),
             max_rounds=3,
         )
         db.commit()

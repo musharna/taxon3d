@@ -43,6 +43,7 @@ def _run_module(
         **(env_extra or {}),
     }
     env.pop("BIO3D_DB_PATH", None)
+    env.pop("BIO3D_DATA_DIR", None)  # would otherwise re-derive DB_PATH beside the URL
     return subprocess.run(
         [sys.executable, "-m", "app.seed", *args],
         cwd=str(REPO),

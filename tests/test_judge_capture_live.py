@@ -15,11 +15,16 @@ def setup_module(_m):
 
 
 def _has_browser() -> bool:
+    """True only when a chromium can actually launch: a system binary, or the one playwright
+    downloaded (`playwright install chromium`). The old `... or True` skipped nothing, ever."""
+    if any(shutil.which(b) for b in ("chromium", "chromium-browser")):
+        return True
     try:
-        import playwright  # noqa: F401
+        from playwright.sync_api import sync_playwright
     except Exception:
         return False
-    return shutil.which("chromium") is not None or True  # playwright ships its own
+    with sync_playwright() as pw:
+        return Path(pw.chromium.executable_path).exists()
 
 
 @pytest.mark.skipif(not _has_browser(), reason="playwright/chromium not available")

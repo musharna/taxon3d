@@ -53,3 +53,24 @@ def test_raises_when_input_image_unparseable():
         with pytest.raises(ReferenceProvenanceError):
             assert_recon_photos_cleared(db, {o.id})
         db.rollback()
+
+
+def test_returns_when_reference_sidecar_is_valid(tmp_path, monkeypatch):
+    """Positive control: a recon whose photo has a valid, redistributable sidecar passes.
+
+    Without this the three tests above could pass on a gate that raises on EVERYTHING."""
+    from app import config
+    from app.licensing import REDISTRIBUTABLE_LICENSES
+    from app.reference_provenance import _REQUIRED
+
+    ref = tmp_path / "reference"
+    ref.mkdir()
+    record = {k: "x" for k in _REQUIRED}
+    record["file"] = "clear_ref.jpg"
+    record["license"] = sorted(REDISTRIBUTABLE_LICENSES)[0]
+    (ref / "clear_ref.json").write_text(json.dumps(record))
+    monkeypatch.setattr(config, "ASSET_DIR", tmp_path)
+    with SessionLocal() as db:
+        o = _recon(db, "reference/clear_ref.jpg")
+        assert_recon_photos_cleared(db, {o.id})  # must return, not raise
+        db.rollback()

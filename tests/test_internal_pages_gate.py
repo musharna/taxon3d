@@ -12,30 +12,45 @@ from starlette.testclient import TestClient
 from app import config
 from app.main import app
 
-# The Tier-C page routes (trait/{id} tested separately — it takes a path param). /research is
-# the hub that lists the rest; it is gated by the same dependency, so a public visitor cannot
-# use it to enumerate the boards.
-INTERNAL_PATHS = [
-    "/benchmark",
-    "/significance",
-    "/difficulty",
-    "/fidelity",
-    "/procedural",
-    "/research",
-]
 
+def internal_gated_paths() -> set[str]:
+    """Every route path that declares `require_internal_pages` — read off the live app, so a
+    newly gated (or un-gated) route is tested without anyone editing a list here."""
+    from app.main import require_internal_pages
+
+    found: set[str] = set()
+    for route in app.routes:
+        dependant = getattr(route, "dependant", None)
+        if dependant is None:
+            continue
+        if any(dep.call is require_internal_pages for dep in dependant.dependencies):
+            found.add(route.path)
+    return found
+
+
+# Derived, not hand-maintained. Path-param routes (trait/{id}, spotlight/{slug}) are tested
+# separately; only GET routes are listed because a GET to a POST-only route 405s before the
+# dependency ever runs, so it could never show the 404 this file asserts.
+_GATED_GET = {
+    r.path
+    for r in app.routes
+    if r.path in internal_gated_paths()
+    and "GET" in (getattr(r, "methods", None) or ())
+    and "{" not in r.path
+}
+# The Tier-C page routes. /research is the hub that lists the rest; it is gated by the same
+# dependency, so a public visitor cannot use it to enumerate the boards.
+INTERNAL_PATHS = sorted(p for p in _GATED_GET if not p.startswith("/api/"))
 # The JSON APIs backing those pages carry the SAME sensitive data, so they must be gated too —
 # otherwise the page 404s but `curl /api/fidelity.json` still leaks the full scorecard.
-INTERNAL_APIS = [
-    "/api/procedural.json",
-    "/api/fidelity.json",
-    "/api/significance",
-    "/api/bias",
-    "/api/benchmark",
-    "/api/difficulty.json",
-    "/api/trait_scores.json",
-    "/api/traits.json",
-]
+INTERNAL_APIS = sorted(p for p in _GATED_GET if p.startswith("/api/"))
+
+
+def test_derived_route_lists_are_populated():
+    """The derivation must actually find the gate, else every loop below passes vacuously."""
+    assert {"/benchmark", "/significance", "/research"} <= set(INTERNAL_PATHS), INTERNAL_PATHS
+    assert {"/api/fidelity.json", "/api/benchmark"} <= set(INTERNAL_APIS), INTERNAL_APIS
+    assert "/trait/{output_id}" in internal_gated_paths()
 
 
 @pytest.fixture
