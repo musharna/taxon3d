@@ -399,8 +399,10 @@ deliberate, because the corpus is not uniformly redistributable:
 
 > The part that **is** redistributable is published separately, on the Hugging Face Hub as
 > [`musharna/taxon3d-corpus-v1`](https://huggingface.co/datasets/musharna/taxon3d-corpus-v1) —
-> 292 of 533 candidate outputs, with the admissibility verdicts that gate them. The 241 withheld
-> are itemised on the dataset card, and the split follows exactly the rule below.
+> 292 of 545 candidate outputs, with the admissibility verdicts that gate them. The 253 withheld
+> are itemised on the dataset card, and the split follows exactly the rule below. Every vote the
+> leaderboard counts ships too (`preferences.jsonl`): a withheld side is named by output id,
+> generator and licence only, since the preference labels are ours even where the mesh is not.
 
 - **Generated 3D outputs** carry the terms of whichever model produced them. Some are
   freely redistributable (MIT-licensed generators such as TRELLIS, TripoSR and
