@@ -23,6 +23,8 @@ from sqlalchemy.orm import Session  # noqa: E402
 from app import admissibility  # noqa: E402
 from app import config  # noqa: E402
 from app import public_export  # noqa: E402
+from app import service  # noqa: E402
+from app.dataset import voter_pseudonym  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.kingdoms import KINGDOM_OF  # noqa: E402
 from app.models import (  # noqa: E402
@@ -36,6 +38,7 @@ from app.models import (  # noqa: E402
     ModelOutput,
     Task,
     Vote,
+    VoterSession,
 )
 from app.public_export import IncludeSet  # noqa: E402
 from app.reference_provenance import assert_recon_photos_cleared  # noqa: E402
@@ -271,7 +274,7 @@ def _category_slug(db: Session, category_id: int | None) -> str | None:
 
 
 def build_tables(db: Session, inc: IncludeSet) -> dict[str, list[dict]]:
-    """Build the five JSONL tables for the cleared include set.
+    """Build the six JSONL tables for the cleared include set.
 
     Every table is keyed on `output_id`, and every row emitted here must reference an output that
     is actually shipping — a verdict pointing at a mesh nobody can see is worse than no verdict.
@@ -350,6 +353,56 @@ def build_tables(db: Session, inc: IncludeSet) -> dict[str, list[dict]]:
             }
         )
 
+    # Every vote the LEADERBOARD counts, shipped by metadata. `votes` above requires both meshes
+    # to ship, and the arena's human votes are cast almost entirely on commercial-API outputs whose
+    # meshes never will (measured 2026-09-05: 1472 of 1609 prod votes had neither side in the
+    # redistribute set), so that table froze at the July own-vs-own votes. The preference labels
+    # are ours; only the meshes are the providers'. A withheld side is named by id, generator and
+    # licence and flagged `*_mesh_available=False` — no path into `meshes/` is written for it.
+    #
+    # The predicates are the board's own (`service._published_vote_filters`), not a copy: gold
+    # decoys, low-trust voters and excluded cohorts drop here for exactly the reasons they drop
+    # from the published ranking, and a fourth predicate added there reaches this table too.
+    # `voter` is `dataset.voter_pseudonym`, the same derivation the site's export uses, so the two
+    # can be joined; the raw session id is the voter's credential and never leaves the server.
+    side_meta: dict[int, tuple[str, str | None]] = {}
+
+    def _side(oid: int) -> tuple[str, str | None]:
+        if oid not in side_meta:
+            o = db.get(ModelOutput, oid)
+            side_meta[oid] = (db.get(Generator, o.generator_id).slug, o.license)
+        return side_meta[oid]
+
+    preferences: list[dict] = []
+    pref_rows = db.execute(
+        select(Comparison, Vote, VoterSession)
+        .join(Vote, Vote.comparison_id == Comparison.id)
+        .outerjoin(VoterSession, VoterSession.session_id == Vote.session_id)
+        .where(*service._published_vote_filters())
+        .order_by(Vote.id)
+    ).all()
+    for c, v, vs in pref_rows:
+        a_slug, a_lic = _side(c.output_a_id)
+        b_slug, b_lic = _side(c.output_b_id)
+        preferences.append(
+            {
+                "output_a_id": c.output_a_id,
+                "output_b_id": c.output_b_id,
+                "winner": v.winner,
+                "criterion": _criterion_slug(db, c.criterion_id),
+                "task_title": db.get(Task, c.task_id).title,
+                "a_generator_slug": a_slug,
+                "b_generator_slug": b_slug,
+                "a_license": a_lic,
+                "b_license": b_lic,
+                "a_mesh_available": c.output_a_id in oid_set,
+                "b_mesh_available": c.output_b_id in oid_set,
+                "voter": voter_pseudonym(v.session_id),
+                "cohort": vs.cohort if vs is not None else None,
+                "created": _iso(v.created),
+            }
+        )
+
     # Only generators that actually have a mesh in this dataset. Written as a plain set
     # comprehension rather than a truthiness `and` — a generator id of 0 would silently drop out
     # of an `and`-based filter.
@@ -384,6 +437,7 @@ def build_tables(db: Session, inc: IncludeSet) -> dict[str, list[dict]]:
         "admissibility": adm,
         "completeness": comp,
         "votes": votes,
+        "preferences": preferences,
         "judge_ratings": judge,
     }
 
@@ -429,7 +483,8 @@ Live arena: https://taxon3d.org
 | `admissibility.jsonl` | {n_admissibility} | **The headline.** One row per (output, predicate) |
 | `completeness.jsonl` | {n_completeness} | Per-organ checklist behind the completeness predicate |
 | `outputs.jsonl` | {n_outputs} | Taxon, kingdom, paradigm, generator, licence, attribution |
-| `votes.jsonl` | {n_votes} | Resolved human pairwise comparisons |
+| `votes.jsonl` | {n_votes} | Resolved human pairwise comparisons where BOTH meshes ship |
+| `preferences.jsonl` | {n_preferences} | **Every vote the leaderboard counts**, by metadata; withheld sides flagged via `a_mesh_available` / `b_mesh_available` |
 | `judge_ratings.jsonl` | {n_judge_ratings} | VLM-judge Bradley-Terry ratings per generator |
 
 ## What is NOT here, and why
@@ -438,8 +493,14 @@ Live arena: https://taxon3d.org
 
 - **Commercial-API outputs.** Much of the live arena is generated by commercial services whose
   terms permit display but not redistribution, so those outputs are excluded here. **This corpus is
-  therefore not the whole arena**, and per-generator counts are not a sample of it. Because the
-  withheld majority is commercial, every published vote is between two of our own outputs.
+  therefore not the whole arena**, and per-generator counts are not a sample of it. Human votes
+  are cast mostly on those withheld outputs, so `votes.jsonl` (both meshes ship) is a small
+  own-vs-own subset. `preferences.jsonl` carries every vote the leaderboard counts instead,
+  naming a withheld side by output id, generator and licence only — no mesh, no path.
+  `a_mesh_available` / `b_mesh_available` say whether that side's mesh is in `meshes/`. The
+  preference labels are ours and ship under the collection licence; the withheld meshes stay
+  with their providers. `voter` is a stable pseudonym (sha256 of the session credential,
+  truncated), never the credential itself, and `cohort` tags recruited waves.
 - **Reference / input photos.** Recon outputs are reconstructed from photographs. The photos are
   not redistributed here, so recon rows are not end-to-end reproducible from this dataset alone.
 - **Attention-check assets.** The arena uses gold decoy pairs to detect inattentive voters.
@@ -477,8 +538,8 @@ deterministic steps, in this order:
 
 Both live in the public repository: https://github.com/musharna/taxon3d
 
-The `votes.jsonl` rows refer to the derived meshes. The `admissibility.jsonl` and
-`completeness.jsonl` rows refer to the originals in `meshes/`.
+The `votes.jsonl` and `preferences.jsonl` rows refer to the derived meshes. The
+`admissibility.jsonl` and `completeness.jsonl` rows refer to the originals in `meshes/`.
 """
 
 
@@ -559,6 +620,7 @@ def write_cards(
             n_admissibility=len(tables["admissibility"]),
             n_completeness=len(tables["completeness"]),
             n_votes=len(tables["votes"]),
+            n_preferences=len(tables["preferences"]),
             n_judge_ratings=len(tables["judge_ratings"]),
             withheld_summary=_withheld_summary(accounting),
         ),

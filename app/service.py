@@ -323,8 +323,12 @@ def generator_display_names(db: Session) -> dict[int, str]:
 _BT_CLUSTER_LEVELS = frozenset({"ballot", "voter"})
 
 
-def _published_vote_filters(criterion_id: int) -> list:
+def _published_vote_filters(criterion_id: int | None = None) -> list:
     """The predicates deciding which votes any PUBLISHED number may be computed from.
+
+    `criterion_id=None` returns the criterion-independent predicates — what the HF dataset
+    export uses to ship "every vote the leaderboard counts" across all criteria at once, so the
+    published dataset and the published board can never disagree about which votes exist.
 
     One list, two consumers: the Bradley-Terry match set and the leaderboard's trend sparkline.
     They used to be two hand-copied `where` clauses with a docstring on the second asserting it
@@ -337,10 +341,11 @@ def _published_vote_filters(criterion_id: int) -> list:
     Both callers must already `outerjoin(VoterSession)` — these predicates reference it.
     """
     filters = [
-        Comparison.criterion_id == criterion_id,
         Comparison.is_gold.is_(False),
         (VoterSession.trust.is_(None)) | (VoterSession.trust >= config.TRUST_THRESHOLD),
     ]
+    if criterion_id is not None:
+        filters.insert(0, Comparison.criterion_id == criterion_id)
     if config.EXCLUDED_COHORTS:
         # `not_in` alone evaluates to NULL for an untagged session, which would drop every
         # ordinary voter from the board — the opposite of the intent — so NULL is admitted

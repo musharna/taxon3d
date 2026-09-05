@@ -17,7 +17,7 @@ import pytest
 import yaml
 from sqlalchemy import select
 
-from app import reference_provenance
+from app import config, reference_provenance
 from app.models import Comparison, Criterion, Generator, JudgeRating, ModelOutput, Task, Vote
 from app.seed import seed_all
 from scripts import export_hf_dataset as hf
@@ -883,3 +883,133 @@ def test_card_declares_a_viewer_config_for_every_table(db_session, tmp_path):
         "from the tables that are actually written"
     )
     assert extra_declared["provenance"] == "provenance.jsonl"
+
+
+# --- preferences: every published vote, by metadata --------------------------------------------
+#
+# The arena's human votes are cast almost entirely on commercial-API outputs whose meshes cannot
+# be redistributed (measured 2026-09-05: 1472 of 1609 prod votes had NEITHER side in the
+# redistribute set). `votes.jsonl` ships a row only when both meshes ship, so it froze at the July
+# own-vs-own votes forever. The preference labels themselves are ours; only the meshes are the
+# providers'. `preferences.jsonl` therefore ships every vote the LEADERBOARD counts, naming each
+# side by id/generator/licence and flagging whether its mesh is in `meshes/`.
+
+
+@pytest.fixture
+def cohort_votes(db_session, voted_comparisons):
+    """Three more votes on the `normal` shipped pair, differing only in the voter's session.
+
+    - `internal`: cohort in `config.EXCLUDED_COHORTS` -> the board drops it, so must we.
+    - `lowtrust`: trust below `config.TRUST_THRESHOLD` -> same.
+    - `wave`: a kept cohort ("wave-2") -> MUST ship, and carry its cohort tag.
+    """
+    from app.models import VoterSession
+
+    a, b = voted_comparisons["normal"]
+    output_a = db_session.get(ModelOutput, a)
+    crit = db_session.execute(select(Criterion)).scalars().first()
+    excluded = next(iter(config.EXCLUDED_COHORTS))
+    sessions = {
+        "fixture-internal": dict(cohort=excluded, trust=1.0),
+        "fixture-lowtrust": dict(cohort="wave-2", trust=config.TRUST_THRESHOLD - 0.1),
+        "fixture-wave": dict(cohort="wave-2", trust=1.0),
+    }
+    for sid, kw in sessions.items():
+        db_session.add(VoterSession(session_id=sid, **kw))
+        comp = Comparison(
+            task_id=output_a.task_id,
+            output_a_id=a,
+            output_b_id=b,
+            criterion_id=crit.id,
+            session_id=sid,
+            is_gold=False,
+        )
+        db_session.add(comp)
+        db_session.flush()
+        db_session.add(Vote(comparison_id=comp.id, winner="b", session_id=sid))
+    db_session.flush()
+    return sessions
+
+
+def _preferences(db_session):
+    titles, slugs = _all_titles_and_slugs(db_session)
+    inc = hf.resolve_hf_include(db_session, task_titles=titles, generator_slugs=slugs)
+    return hf.build_tables(db_session, inc)
+
+
+def test_preferences_ship_restricted_pairs_by_metadata_while_votes_do_not(
+    db_session, voted_comparisons, commercial_output
+):
+    tables = _preferences(db_session)
+    prefs = tables["preferences"]
+    pairs = {(r["output_a_id"], r["output_b_id"]) for r in prefs}
+    normal, non_shipping = voted_comparisons["normal"], voted_comparisons["non_shipping"]
+
+    # POSITIVE CONTROL: the own-vs-own vote is in both tables.
+    assert normal in pairs
+    assert normal in {(r["output_a_id"], r["output_b_id"]) for r in tables["votes"]}
+    # The vote on a restricted-licence output ships here by metadata, and NOT in votes.jsonl.
+    assert non_shipping in pairs
+    assert non_shipping not in {(r["output_a_id"], r["output_b_id"]) for r in tables["votes"]}
+
+    row = next(r for r in prefs if (r["output_a_id"], r["output_b_id"]) == non_shipping)
+    assert row["a_mesh_available"] is True
+    assert row["b_mesh_available"] is False, "the commercial side's mesh does not ship"
+    assert row["b_generator_slug"] == db_session.get(Generator, commercial_output.generator_id).slug
+    assert row["b_license"] == commercial_output.license
+    assert row["winner"] == "a"
+    assert row["criterion"]
+    a_task = db_session.get(ModelOutput, non_shipping[0]).task_id
+    assert row["task_title"] == db_session.get(Task, a_task).title
+    # Nothing in the row is a path into meshes/ for the withheld side.
+    assert "mesh_path" not in row
+
+
+def test_preferences_exclude_gold(db_session, voted_comparisons):
+    prefs = _preferences(db_session)["preferences"]
+    assert voted_comparisons["gold"] not in {(r["output_a_id"], r["output_b_id"]) for r in prefs}
+    assert not any("gold" in k for r in prefs for k in r)
+
+
+def test_preferences_voter_is_a_pseudonym_not_the_session_cookie(db_session, voted_comparisons):
+    import re
+
+    from app.dataset import voter_pseudonym
+
+    prefs = _preferences(db_session)["preferences"]
+    assert prefs
+    raw_ids = {"fixture-normal", "fixture-nonshipping"}
+    for r in prefs:
+        assert re.fullmatch(r"[0-9a-f]{16}", r["voter"]), r["voter"]
+        assert r["voter"] not in raw_ids
+    normal = next(
+        r for r in prefs if (r["output_a_id"], r["output_b_id"]) == voted_comparisons["normal"]
+    )
+    # Stable and derived the same way the site's own export derives it, so the two can be joined.
+    assert normal["voter"] == voter_pseudonym("fixture-normal")
+
+
+def test_preferences_follow_the_boards_published_vote_filters(db_session, cohort_votes):
+    from app.dataset import voter_pseudonym
+
+    prefs = _preferences(db_session)["preferences"]
+    voters = {r["voter"]: r for r in prefs}
+    assert voter_pseudonym("fixture-internal") not in voters, "excluded cohort leaked"
+    assert voter_pseudonym("fixture-lowtrust") not in voters, "low-trust voter leaked"
+    # POSITIVE CONTROL in the same test: the kept cohort ships, with its tag.
+    kept = voters[voter_pseudonym("fixture-wave")]
+    assert kept["cohort"] == "wave-2"
+    assert kept["winner"] == "b"
+
+
+def test_card_counts_preferences_and_states_the_posture(db_session, tmp_path, voted_comparisons):
+    tables = _preferences(db_session)
+    out = tmp_path / "card"
+    hf.write_cards(out, tables, n_meshes=len(tables["outputs"]))
+    card = (out / "README.md").read_text()
+    assert "`preferences.jsonl`" in card
+    assert f"| {len(tables['preferences'])} |" in card
+    assert "mesh_available" in card, "the card must tell readers how to spot a withheld side"
+    assert "every published vote is between two of our own outputs" not in card, (
+        "the old claim is false once preferences ship votes on withheld outputs"
+    )
