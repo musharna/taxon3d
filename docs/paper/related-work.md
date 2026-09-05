@@ -26,13 +26,16 @@ it, in the biological setting the original leaves open.
 
 **3DGen-Arena / 3DGen-Bench** (Zhang et al., arXiv:2503.21745) proposes an arena-style collection
 platform for generative 3D and trains CLIP- and MLLM-based reward scorers from the collected
-preferences; annotation is a hybrid of public and expert raters over generic-object prompts.
+preferences; annotation is a hybrid of public and expert raters. Its prompt set spans six generic
+subject categories — Vehicle, Animal, Plant, Food, Indoor, Outdoor — so plants ARE represented
+there, as one category among six, without taxonomy, reference photographs, biological ground truth,
+or any admissibility check before an output is voted on.
 **GenAI-Arena** (Jiang et al., arXiv:2406.04485) applies Bradley–Terry estimation to ~9,000 votes
 across image, image-editing, and video generation but does not cover 3D. **K-Sort Arena** (Li et
 al., arXiv:2408.14468) improves the _statistical efficiency_ of preference collection via K-wise
 comparisons — a complementary ranking-method advance orthogonal to domain. All share our arena
-mechanics but none targets a scientific domain, and none couples human preference to a
-domain-grounded correctness signal.
+mechanics; 3DGen-Bench even includes plants. None couples human preference to a domain-grounded
+admissibility signal, which is the axis this work adds.
 
 ## VLM-as-judge for 3D
 
@@ -79,16 +82,17 @@ arena publishes a comparable governance surface.
 ## Positioning
 
 | Capability                                                | **Taxon3D** | 3D Arena | 3DGen-Bench | GenAI-Arena | Plant Methods |
-| --------------------------------------------------------- | ---------------- | -------- | ----------- | ----------- | ------------- |
-| Biological/plant domain                                   | ✓                | ✗        | ✗           | ✗           | ✓             |
-| Live human voting + leaderboard                           | ✓                | ✓        | ✓           | ✓           | ✗             |
-| Elo + Bradley–Terry + bootstrap CIs                       | ✓                | ~        | ~           | ✓           | ✗             |
-| Held-out-scan GT (Chamfer/F-score)                        | ✓                | ✗        | ~           | ✗           | ✓             |
-| Calibrated VLM judge (chance-corrected κ)                 | ✓                | ✗        | ~           | ✗           | ✗             |
-| Position/format bias audit (corrected)                    | ✓                | ~        | ✗           | ✗           | ✗             |
-| Vote integrity (gold checks + trust gating)               | ✓                | ~        | ✗           | ✗           | —             |
-| Published governance / submission policy                  | ✓                | ✗        | ✗           | ✗           | ✗             |
-| Multi-modal span (plant + procedural + recon + molecular) | ✓                | ✗        | ✗           | ✗           | ✗             |
+| --------------------------------------------------------- | ----------- | -------- | ----------- | ----------- | ------------- |
+| Plants present in the prompt set                          | ✓           | ✗        | ✓ (generic) | ✗           | ✓             |
+| Biological admissibility gate before preference           | ✓           | ✗        | ✗           | ✗           | ✗             |
+| Live human voting + leaderboard                           | ✓           | ✓        | ✓           | ✓           | ✗             |
+| Elo + Bradley–Terry + bootstrap CIs                       | ✓           | ~        | ~           | ✓           | ✗             |
+| Held-out-scan GT (Chamfer/F-score)                        | ✓           | ✗        | ~           | ✗           | ✓             |
+| Calibrated VLM judge (chance-corrected κ)                 | ✓           | ✗        | ~           | ✗           | ✗             |
+| Position/format bias audit (corrected)                    | ✓           | ~        | ✗           | ✗           | ✗             |
+| Vote integrity (gold checks + trust gating)               | ✓           | ~        | ✗           | ✗           | —             |
+| Published governance / submission policy                  | ✓           | ✗        | ✗           | ✗           | ✗             |
+| Multi-modal span (plant + procedural + recon + molecular) | ✓           | ✗        | ✗           | ✗           | ✗             |
 
 The gap Taxon3D does not yet close is _scale_: with vote volume far below 3D Arena's, our
 Bradley–Terry intervals remain wide and many ranks are provisional. This is a matter of
