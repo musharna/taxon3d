@@ -436,6 +436,7 @@ def test_no_table_leaks_gold_columns(db_session, voted_comparisons, judge_rating
         "admissibility",
         "completeness",
         "votes",
+        "preferences",
         "judge_ratings",
     }
     for name, rows in tables.items():
