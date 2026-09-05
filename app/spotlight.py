@@ -112,12 +112,11 @@ SPOTLIGHTS: list[dict] = [
         "blurb": "How 3D methods handle a rose (Rosa) — the 3rd crop spotlight. Spans a real CC0 "
         "Rosa rugosa X-ray CT (scan + the volumetric sensor axis), found artist roses, image→3D "
         "recon, and procedural generators (whose bloom fidelity is the open frontier).",
-        "reference_image": "reference/rose_ref.jpg",
-        # PRIVATE / non-CC: isolated potted-rose product photo (plain wall, multi-bloom; minor pot
-        # label only). Replaced the CC0 hedge-and-meadow photo that gave no isolated subject.
-        # Relicense before public use (old hedge at reference/rose_ref_hedge_old.jpg; earlier iStock
-        # comp at reference/rose_ref_istock_old.jpg).
-        "reference_credit": "Photo: product image (PRIVATE — relicense before public use)",
+        # The CC re-sourced recon input (sidecar rose_ref.json covers rose_ref_clean.jpg). The
+        # earlier private product photo (reference/rose_ref.jpg) has no provenance record and
+        # must not be shown anywhere; its recon outputs are hidden as the licensing control.
+        "reference_image": "reference/rose_ref_clean.jpg",
+        "reference_credit": "Photo: Acabashi / Wikimedia Commons, CC-BY-SA-4.0",
     },
     {
         "slug": "soybean",
@@ -131,11 +130,10 @@ SPOTLIGHTS: list[dict] = [
         "blurb": "How 3D methods handle soybean (Glycine max) — the Track-A2 legume spotlight. "
         "Found artist + phenotyping scans, image→3D recon, and procedural (Demeter). The scan tier "
         "is a CC-BY common-bean point-cloud stand-in — no open-licensed soybean scan exists.",
-        "reference_image": "reference/soybean_ref.jpg",
-        # PRIVATE / non-CC: user-supplied isolated single-plant photo (black background) — swapped in
-        # to replace the CC0 field photo that forced "box of canopy" recon. RELICENSE before any public
-        # launch (old CC0 field photo kept at reference/soybean_ref_field_old.jpg).
-        "reference_credit": "Photo: user-supplied (PRIVATE — relicense before public use)",
+        # Sidecar soybean_ref.json covers soybean_ref_clean.jpg; the older private photo
+        # (reference/soybean_ref.jpg) has no record and stays off every page.
+        "reference_image": "reference/soybean_ref_clean.jpg",
+        "reference_credit": "Photo: H. Zell / Wikimedia Commons, CC-BY-SA-3.0",
     },
 ]
 

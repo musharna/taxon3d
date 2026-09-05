@@ -471,11 +471,10 @@ def main() -> int:
         if args.dry_run:
             return 0
 
-    import anthropic
-
+    from app.llm import anthropic_client
     from scripts.judge_capture import browser_capture_multi_factory
 
-    client = anthropic.Anthropic()
+    client = anthropic_client()
 
     def judge_fn(species, prompt, cname, cdesc, a_b64, b_b64):
         return judge.judge_pair(

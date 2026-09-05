@@ -2,12 +2,12 @@
 point clouds. Pure-geometry functions are unit-tested here; the GLB parsers get a
 real-execution check against a shipped asset (skipped if the data dir isn't present)."""
 
-import os
+from pathlib import Path
 
 import numpy as np
 import pytest
 
-from app import config, hero_points as hp
+from app import hero_points as hp
 
 
 def test_normalize_centers_and_scales_to_unit():
@@ -89,12 +89,15 @@ def test_crop_base_removes_low_end_and_keeps_cap():
     assert (out[:, 1] > 0.9).sum() > 1800  # dense cap preserved
 
 
-@pytest.mark.skipif(
-    not os.path.exists(os.path.join(str(config.ASSET_DIR), "gt", "zea_mays.glb")),
-    reason="GT asset bundle not present in this data dir",
-)
+# The REAL repo data dir, not config.ASSET_DIR: under pytest that is always the conftest temp
+# dir (which holds only reference photos), so keying the skip on it meant this real-execution
+# check never ran anywhere. data/ is gitignored, so the skip still fires on CI.
+_REAL_GT_GLB = Path(__file__).resolve().parent.parent / "data" / "assets" / "gt" / "zea_mays.glb"
+
+
+@pytest.mark.skipif(not _REAL_GT_GLB.exists(), reason=f"GT scan absent (gitignored): {_REAL_GT_GLB}")
 def test_points_glb_parses_real_gt_scan():
-    data = open(os.path.join(str(config.ASSET_DIR), "gt", "zea_mays.glb"), "rb").read()
+    data = _REAL_GT_GLB.read_bytes()
     pts = hp.points_arrays(data)
     assert pts.ndim == 2 and pts.shape[1] == 3
     assert len(pts) > 1000  # a real dense scan

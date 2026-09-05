@@ -7,6 +7,8 @@ scripts/export_public.py.
 
 from __future__ import annotations
 
+import hashlib
+
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -23,6 +25,18 @@ from .models import (
     Vote,
 )
 
+
+
+def voter_pseudonym(session_id: str) -> str:
+    """Stable per-voter identifier that is NOT the voter's credential.
+
+    `Vote.session_id` is the raw `bio3d_session` cookie — the bearer token for captcha state,
+    trust, the HF login and the Prolific completion code. It must never leave the server. A
+    one-way hash keeps voter-level analyses (clustered bootstrap, dominance) reproducible across
+    exports while making the export useless for session takeover. 128-bit random ids cannot be
+    brute-forced back from a truncated SHA-256, so no server-side secret is needed.
+    """
+    return hashlib.sha256(session_id.encode()).hexdigest()[:16]
 
 def build_preference_records(
     db: Session, comparison_ids: set[int] | None = None, kingdom: str | None = None
@@ -47,11 +61,15 @@ def build_preference_records(
     for vote, comp in rows:
         if comparison_ids is not None and comp.id not in comparison_ids:
             continue
+        if comp.is_gold:
+            continue  # attention checks: asset_path encodes the answer key, and they are not data
         task = db.get(Task, comp.task_id)
         if kingdom != "all" and KINGDOM_OF.get(task.category.slug) != kingdom:
             continue
         out_a = db.get(ModelOutput, comp.output_a_id)
         out_b = db.get(ModelOutput, comp.output_b_id)
+        if out_a.hidden_at is not None or out_b.hidden_at is not None:
+            continue  # withdrawn outputs are withheld everywhere, including their R2 keys
         crit = db.get(Criterion, comp.criterion_id)
         records.append(
             {
@@ -64,7 +82,7 @@ def build_preference_records(
                 "asset_a": out_a.asset_path,
                 "asset_b": out_b.asset_path,
                 "winner": vote.winner,
-                "session": vote.session_id,
+                "session": voter_pseudonym(vote.session_id),
                 "voted_at": vote.created.isoformat(),
             }
         )

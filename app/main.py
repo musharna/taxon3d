@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import random
@@ -36,7 +37,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy import text as sa_text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from . import (
@@ -874,6 +875,12 @@ def _build_calibration_comparison(db: Session, session_id: str) -> dict | None:
         out_b = db.get(ModelOutput, cp.output_b_id)
         if crit is None or task is None or out_a is None or out_b is None:
             continue  # dangling pair — unusable; exclude from progress + target selection
+        if out_a.hidden_at is not None or out_b.hidden_at is not None:
+            # A hidden member is withheld at /media (see _withheld), so the ballot would show a
+            # 404 mesh — the gold bug of 2026-08-28, on the calibration path. Curated pairs are
+            # deliberately NOT run through _vote_pool_predicate (roster/texture rules are for
+            # the open pool); withholding is the one rule every serving path must share.
+            continue
         total += 1
         already = integrity.already_voted_pair(
             db, session_id, cp.output_a_id, cp.output_b_id, cp.criterion_id
@@ -989,9 +996,20 @@ def _build_ballot(
     return _build_comparison(db, session_id, criterion_slug, category_slug, kingdom=kingdom)
 
 
+#: Set by the moderation page after a successful `?token=` visit so that the forms and redirects
+#: on it no longer have to carry the secret in URLs, which land in edge/access logs, browser
+#: history and Referer headers. HttpOnly; the browser sends it, scripts cannot read it.
+ADMIN_COOKIE = "bio3d_admin"
+
+
 def _require_admin(token: str | None) -> None:
-    if not token or token != config.ADMIN_TOKEN:
+    if not token or not hmac.compare_digest(token, config.ADMIN_TOKEN):
         raise HTTPException(status_code=401, detail="Invalid or missing admin token")
+
+
+def _admin_token_of(request: Request, token: str | None) -> str | None:
+    """The token a request presents: explicit (query/form) first, else the admin cookie."""
+    return token or request.cookies.get(ADMIN_COOKIE)
 
 
 def require_admin_header(x_admin_token: str | None = Header(default=None)) -> None:
@@ -999,11 +1017,12 @@ def require_admin_header(x_admin_token: str | None = Header(default=None)) -> No
     _require_admin(x_admin_token)
 
 
-def require_admin_query(token: str | None = None) -> None:
-    """Dependency for admin HTML pages (token via ?token= query). These GET pages render
-    admin/moderation data (incl. submitter PII + un-vetted asset URLs), so they must not be
-    world-readable even though the mutating POSTs are already token-gated."""
-    _require_admin(token)
+def require_admin_query(request: Request, token: str | None = None) -> None:
+    """Dependency for admin HTML pages (token via ?token= query, or the admin cookie the
+    moderation page sets after one such visit). These GET pages render admin/moderation data
+    (incl. submitter PII + un-vetted asset URLs), so they must not be world-readable even though
+    the mutating POSTs are already token-gated."""
+    _require_admin(_admin_token_of(request, token))
 
 
 def require_internal_pages() -> None:
@@ -1340,6 +1359,8 @@ def api_next(
     category: str | None = None,
     mode: str | None = Query(default=None, alias="set"),
 ):
+    if not integrity.check_next_rate_limit(request.state.client_ip):
+        raise HTTPException(429, "Rate limit exceeded — slow down")
     payload = _build_ballot(
         db,
         request.state.session_id,
@@ -1365,18 +1386,25 @@ def api_vote(
 ):
     sid = request.state.session_id
 
-    # 1. Human verification (no-op unless REQUIRE_CAPTCHA is enabled).
-    if not integrity.captcha_ok_for_session(db, sid, x_captcha_token):
-        raise HTTPException(403, "Captcha verification required/failed")
-    # 2. Rate limiting — per session AND per IP (the IP layer caps cookie-reset farming).
+    # 1. Rate limiting — per session AND per IP (the IP layer caps cookie-reset farming).
+    #    Cheapest check first: the captcha gate below may make a blocking siteverify call,
+    #    so it must never be reachable by a request the limiter would have refused.
     if not integrity.check_rate_limit(sid):
         raise HTTPException(429, "Rate limit exceeded — slow down")
     if not integrity.check_ip_rate_limit(request.state.client_ip):
         raise HTTPException(429, "Rate limit exceeded — slow down")
+    # 2. Human verification (no-op unless REQUIRE_CAPTCHA is enabled).
+    if not integrity.captcha_ok_for_session(db, sid, x_captcha_token):
+        raise HTTPException(403, "Captcha verification required/failed")
 
     comparison = db.get(Comparison, vote_in.comparison_id)
     if comparison is None:
         raise HTTPException(404, "Unknown comparison")
+    if comparison.session_id != sid:
+        # Ballots are served to ONE session. Ids are sequential, so without this a script
+        # could consume other voters' ballots and have its gold answers scored against the
+        # wrong session.
+        raise HTTPException(403, "Comparison was not served to this session")
     if comparison.vote is not None:
         raise HTTPException(409, "Comparison already voted")
     # 3. Dedup: a session may not re-vote the same (non-gold) pairing.
@@ -1387,7 +1415,13 @@ def api_vote(
 
     vote = Vote(comparison_id=comparison.id, winner=vote_in.winner, session_id=sid)
     db.add(vote)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # Two requests for the same ballot passed the `comparison.vote is None` check together;
+        # Vote.comparison_id is UNIQUE, so the loser surfaces here rather than as a 500.
+        db.rollback()
+        raise HTTPException(409, "Comparison already voted")
     integrity.note_vote(db, sid)
 
     if comparison.is_gold:
@@ -1435,15 +1469,18 @@ def api_kvote(
     import json as _json
 
     sid = request.state.session_id
-    if not integrity.captcha_ok_for_session(db, sid, x_captcha_token):
-        raise HTTPException(403, "Captcha verification required/failed")
+    # Limiter first, captcha second — same order and reason as /api/vote.
     if not integrity.check_rate_limit(sid):
         raise HTTPException(429, "Rate limit exceeded — slow down")
     if not integrity.check_ip_rate_limit(request.state.client_ip):
         raise HTTPException(429, "Rate limit exceeded — slow down")
+    if not integrity.captcha_ok_for_session(db, sid, x_captcha_token):
+        raise HTTPException(403, "Captcha verification required/failed")
     ballot = db.get(KBallot, kvote_in.ballot_id)
     if ballot is None:
         raise HTTPException(404, "Unknown ballot")
+    if ballot.session_id != sid:
+        raise HTTPException(403, "Ballot was not served to this session")
     if ballot.resolved:
         raise HTTPException(409, "Ballot already resolved")
     ids = _json.loads(ballot.output_ids_json)
@@ -2926,12 +2963,12 @@ def api_procedural(db: Session = Depends(get_db)):
     return service.procedural_scorecard(db)
 
 
-@app.get("/api/completeness.json")
+@app.get("/api/completeness.json", dependencies=[Depends(require_internal_pages)])
 def api_completeness(db: Session = Depends(get_db)):
     return service.completeness_rows(db)
 
 
-@app.get("/api/dgen.json")
+@app.get("/api/dgen.json", dependencies=[Depends(require_internal_pages)])
 def api_dgen(db: Session = Depends(get_db)):
     return service.dgen_trajectory(db)
 
@@ -3746,10 +3783,14 @@ async def api_submit(
 ):
     """Public: queue a community 3D output for moderation (rate-limited, validated)."""
     sid = request.state.session_id
-    if not integrity.captcha_ok_for_session(db, sid, x_captcha_token):
-        raise HTTPException(403, "Captcha verification required/failed")
     if not integrity.check_rate_limit(sid):
         raise HTTPException(429, "Rate limit exceeded — slow down")
+    if not integrity.captcha_ok_for_session(db, sid, x_captcha_token):
+        raise HTTPException(403, "Captcha verification required/failed")
+    # Read one byte past the cap: the whole body would otherwise sit in RAM before validation.
+    data = await file.read(config.SUBMIT_MAX_BYTES + 1)
+    if len(data) > config.SUBMIT_MAX_BYTES:
+        raise HTTPException(413, f"Upload exceeds {config.SUBMIT_MAX_BYTES} bytes")
     ext = (file.filename or "asset.glb").rsplit(".", 1)[-1].lower()
     try:
         meta_dict = json.loads(meta) if meta else {}
@@ -3760,7 +3801,7 @@ async def api_submit(
             db,
             task_id=task_id,
             generator_slug=generator_slug,
-            data=await file.read(),
+            data=data,
             ext=ext,
             title=title,
             meta=meta_dict,
@@ -3836,66 +3877,80 @@ def moderation_page(request: Request, db: Session = Depends(get_db)):
                 "hidden": o.hidden_at is not None,
             }
         )
-    return templates.TemplateResponse(
+    resp = templates.TemplateResponse(
         request, "moderation.html", {"pending": rows, "flagged": flagged}
     )
+    if request.query_params.get("token"):
+        resp.set_cookie(
+            ADMIN_COOKIE,
+            config.ADMIN_TOKEN,
+            httponly=True,
+            samesite="strict",
+            secure=request.url.scheme == "https",
+            max_age=8 * 3600,
+        )
+    return resp
 
 
 @app.post("/admin/submissions/{submission_id}/approve")
 def admin_approve(
     submission_id: int,
-    token: str = Form(...),
+    request: Request,
+    token: str = Form(default=""),
     note: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
-    _require_admin(token)
+    _require_admin(_admin_token_of(request, token))
     try:
         submissions.approve(db, submission_id, note)
     except ingest.IngestError as exc:
         raise HTTPException(400, str(exc)) from exc
     db.commit()
-    # Carry the token so the redirect lands on the now token-gated moderation page.
-    return RedirectResponse(f"/admin/moderation?token={quote(token)}", status_code=303)
+    return RedirectResponse("/admin/moderation", status_code=303)
 
 
 @app.post("/admin/submissions/{submission_id}/reject")
 def admin_reject(
     submission_id: int,
-    token: str = Form(...),
+    request: Request,
+    token: str = Form(default=""),
     note: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
-    _require_admin(token)
+    _require_admin(_admin_token_of(request, token))
     try:
         submissions.reject(db, submission_id, note)
     except ingest.IngestError as exc:
         raise HTTPException(400, str(exc)) from exc
     db.commit()
-    # Carry the token so the redirect lands on the now token-gated moderation page.
-    return RedirectResponse(f"/admin/moderation?token={quote(token)}", status_code=303)
+    return RedirectResponse("/admin/moderation", status_code=303)
 
 
 @app.post("/admin/outputs/{output_id}/hide")
-def admin_hide_output(output_id: int, token: str = Form(...), db: Session = Depends(get_db)):
-    _require_admin(token)
+def admin_hide_output(
+    output_id: int, request: Request, token: str = Form(default=""), db: Session = Depends(get_db)
+):
+    _require_admin(_admin_token_of(request, token))
     out = db.get(ModelOutput, output_id)
     if out is None:
         raise HTTPException(404, "Unknown output")
     if out.hidden_at is None:
         out.hidden_at = _models_utcnow()
     db.commit()
-    return RedirectResponse(f"/admin/moderation?token={quote(token)}", status_code=303)
+    return RedirectResponse("/admin/moderation", status_code=303)
 
 
 @app.post("/admin/outputs/{output_id}/restore")
-def admin_restore_output(output_id: int, token: str = Form(...), db: Session = Depends(get_db)):
-    _require_admin(token)
+def admin_restore_output(
+    output_id: int, request: Request, token: str = Form(default=""), db: Session = Depends(get_db)
+):
+    _require_admin(_admin_token_of(request, token))
     out = db.get(ModelOutput, output_id)
     if out is None:
         raise HTTPException(404, "Unknown output")
     out.hidden_at = None
     db.commit()
-    return RedirectResponse(f"/admin/moderation?token={quote(token)}", status_code=303)
+    return RedirectResponse("/admin/moderation", status_code=303)
 
 
 @app.get("/healthz")

@@ -47,11 +47,9 @@ def _common(taxon: str) -> str:
 
 
 def _build_client():
-    import os
+    from app.llm import anthropic_client
 
-    import anthropic
-
-    return anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    return anthropic_client()
 
 
 def independence_only(slug: str, *, input_photo_ids: set[str]) -> dict:

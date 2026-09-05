@@ -201,13 +201,11 @@ def main() -> int:
         if args.dry_run:
             return 0
 
-    import anthropic
-
+    from app import traits as traits_mod
+    from app.llm import anthropic_client
     from scripts.judge_capture import browser_capture_multi_factory
 
-    from app import traits as traits_mod
-
-    client = anthropic.Anthropic()
+    client = anthropic_client()
 
     def check_fn(species, prompt, sheet_b64, rubric_traits):
         return traits_mod.check_traits(

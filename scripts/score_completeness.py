@@ -1,7 +1,7 @@
 # scripts/score_completeness.py
 """Batch-score organism-level completeness for outputs. Renders (or reuses) a turntable contact
 sheet per output, VLM-checks organ presence, persists a Completeness row. Build the Anthropic
-client from ANTHROPIC_API_KEY (as scripts/judge_vlm.py does). Never set BIO3D_DATABASE_URL=study.
+client from ANTHROPIC_API_KEY (app.llm). Dry-run by default; --apply writes (app.dbguard).
 
 NOTE: the plan/brief called this condition "multi8"; app.judge_render.CONDITIONS has no such key
 (only "single", "multi4", "turntable" — verified live, 2026-07-01). "turntable" is the closest
@@ -20,9 +20,11 @@ import pathlib as _pl
 _sys.path.insert(0, str(_pl.Path(__file__).resolve().parent.parent))
 
 from app.database import SessionLocal, init_db
+from app.dbguard import add_write_target_args, confirm_write_target
 from app.completeness import enumerate_completeness_work, score_outputs
 from app.judge_render import contact_sheet_path, render_contact_sheets
 from app import config
+from app.llm import anthropic_client
 
 SCORER_VERSION = "completeness-v1"
 CONDITION = "turntable"
@@ -42,10 +44,7 @@ def _sheet_provider(db, capture_multi):
 
 
 def _build_client():
-    import os
-    import anthropic
-
-    return anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    return anthropic_client()
 
 
 def _capture_multi():
@@ -59,7 +58,9 @@ def _capture_multi():
 def main() -> int:
     ap = argparse.ArgumentParser(description="Batch-score organism-level completeness.")
     ap.add_argument("--tasks", default="", help="comma task ids (default: all with a rubric)")
+    add_write_target_args(ap)
     args = ap.parse_args()
+    confirm_write_target(args, purpose="score completeness and upsert Completeness rows")
     init_db()
     with SessionLocal() as db:
         from app.models import Task, TraitRubric

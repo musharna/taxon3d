@@ -13,12 +13,60 @@ imported tifffile first), serves the public routes, and asserts the heavy module
 
 from __future__ import annotations
 
+import ast
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Import name -> distribution name, for the cases where PyPI and `import` disagree. Anything not
+# listed here is assumed to import under its distribution name (fastapi, httpx, numpy, ...).
+_IMPORT_TO_DIST = {
+    "PIL": "pillow",
+    "sqlalchemy": "SQLAlchemy",
+    "jinja2": "Jinja2",
+    "multipart": "python-multipart",
+    "yaml": "PyYAML",
+    "skimage": "scikit-image",
+    "open_clip": "open_clip_torch",
+}
+
+
+def _pinned_distributions(*files: str) -> set[str]:
+    """Distribution names pinned in the given requirements files, lower-cased, extras stripped."""
+    names: set[str] = set()
+    for f in files:
+        for line in (REPO_ROOT / f).read_text().splitlines():
+            line = line.split("#", 1)[0].strip()
+            if not line or line.startswith("-"):
+                continue
+            m = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)", line)
+            if m:
+                names.add(m.group(1).lower())
+    return names
+
+
+def _top_level_third_party_imports() -> dict[str, set[str]]:
+    """Module name -> app files that import it at module top level (not lazily, not in strings)."""
+    found: dict[str, set[str]] = {}
+    for path in sorted((REPO_ROOT / "app").glob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in tree.body:
+            if isinstance(node, ast.Import):
+                roots = [alias.name.split(".")[0] for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                roots = [node.module.split(".")[0]]
+            else:
+                continue
+            for root in roots:
+                if root in sys.stdlib_module_names or root in ("app", "__future__"):
+                    continue
+                found.setdefault(root, set()).add(path.name)
+    return found
+
 
 # Offline-only: the request path never reaches these. Kept out of requirements.txt.
 #   torch/open_clip -> app.species_id, reached only via reference_qa <- input_verify <- a script
@@ -103,3 +151,36 @@ def test_requirements_files_partition_the_dependencies():
     # Layered, so a research or dev install is a superset of runtime rather than a rival list.
     assert "-r requirements.txt" in research
     assert "-r requirements-research.txt" in dev
+
+
+def test_every_top_level_app_import_is_installable_from_the_runtime_files():
+    """A module-level `import x` in app/*.py must resolve from requirements.txt + -scale.txt.
+
+    The subprocess probe above only exercises the public routes, so a module that is imported at
+    top level by a file the public routes never touch (app.recon_client, app.image3d, app.client)
+    is invisible to it — and it was: `httpx` sat at the top of three app modules while living only
+    in requirements-dev.txt. The Docker image installs runtime + scale and nothing else, so any
+    import path that reached one of those modules would have died with ModuleNotFoundError in
+    production and nowhere else.
+
+    The stdlib is excluded by `sys.stdlib_module_names`; lazy (inside-function) imports are
+    excluded by walking only `tree.body`, which is exactly the lazy-import escape hatch the
+    docstring of this file prescribes for research-only modules.
+    """
+    pinned = _pinned_distributions("requirements.txt", "requirements-scale.txt")
+    missing = {}
+    for module, files in _top_level_third_party_imports().items():
+        dist = _IMPORT_TO_DIST.get(module, module).lower()
+        if dist not in pinned:
+            missing[module] = sorted(files)
+    assert not missing, (
+        f"imported at module top level under app/ but pinned in neither requirements.txt nor "
+        f"requirements-scale.txt: {missing}. Pin it (runtime if the serving app can reach it), or "
+        "import it lazily inside the function that needs it."
+    )
+
+    # Positive control: the scanner must actually see the imports it is guarding. If the AST walk
+    # silently found nothing, the assertion above would pass on an empty dict.
+    seen = _top_level_third_party_imports()
+    assert "fastapi" in seen and "main.py" in seen["fastapi"]
+    assert "sqlalchemy" in seen and "database.py" in seen["sqlalchemy"]

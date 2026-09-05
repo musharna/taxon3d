@@ -18,6 +18,8 @@ import pathlib as _pl
 _sys.path.insert(0, str(_pl.Path(__file__).resolve().parent.parent))
 
 from app.database import SessionLocal, init_db
+from app.dbguard import add_write_target_args, confirm_write_target
+from app.llm import anthropic_client
 from app.commission import SPECIES_COMMON, openrouter_complete, run_bpy
 from app.dgen import refine_loop, score_glb
 
@@ -45,15 +47,18 @@ def main() -> int:
         default=None,
         help="resume an existing DGenRun id; taxa that already have iterations are skipped",
     )
+    add_write_target_args(ap)
     args = ap.parse_args()
+    confirm_write_target(
+        args, purpose=f"run D-Gen refinement for {args.model}: DGenRun/DGenIteration rows + GLBs"
+    )
 
-    import anthropic
     import httpx
 
     from scripts.judge_capture import browser_capture_multi_factory
 
     or_key = os.environ["OPENROUTER_API_KEY"]
-    judge_client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    judge_client = anthropic_client()
     capture_multi = browser_capture_multi_factory()
     complete_fn = _complete_fn(httpx.post, or_key)
 

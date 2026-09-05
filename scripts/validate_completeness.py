@@ -5,7 +5,7 @@ CSVs, compare against persisted Completeness rows, and report BINARY (complete/i
 
 The calibration CSVs live outside the repo (gitignored study data); point at them with
 BIO3D_STUDY_DIR (default: data/study). Writes docs/results/2026-07-01-completeness-validation-
-results.md. NEVER set BIO3D_DATABASE_URL=study — use a throwaway COPY of the study DB."""
+results.md. Dry-run by default; --apply runs, the study DB needs --allow-study (app.dbguard)."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ import pathlib as _pl
 _sys.path.insert(0, str(_pl.Path(__file__).resolve().parent.parent))
 
 from app.database import SessionLocal, init_db
+from app.dbguard import add_write_target_args, confirm_write_target
 from app.completeness_validation import gt_by_output, agreement, _binary
 
 STUDY_DIR = os.environ.get("BIO3D_STUDY_DIR", "data/study")
@@ -48,6 +49,14 @@ def _dist(cats) -> dict:
 
 
 def main() -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__)
+    add_write_target_args(ap)
+    args = ap.parse_args()
+    confirm_write_target(
+        args, purpose=f"init_db() (creates missing tables) and write {RESULTS}"
+    )
     init_db()
     cal = _load_calibration_rows()
     gt = gt_by_output(cal)

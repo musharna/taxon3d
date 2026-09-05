@@ -9,8 +9,8 @@ Reads `{output_id}_{condition}.png` from --sheets-dir and reuses the shipped
 `app.completeness.score_outputs` seam (VLM organ-presence read -> derive -> upsert). Restricts
 to eligible outputs that actually have a sheet on disk (and an optional --outputs allowlist).
 
-Build the Anthropic client from ANTHROPIC_API_KEY. NEVER set BIO3D_DATABASE_URL=study — point it
-at a throwaway COPY of the study DB (sqlite:///…)."""
+Anthropic client from app.llm. Dry-run by default; --apply writes, and the study DB needs
+--allow-study on top (app.dbguard)."""
 
 from __future__ import annotations
 
@@ -25,6 +25,8 @@ import pathlib as _pl
 _sys.path.insert(0, str(_pl.Path(__file__).resolve().parent.parent))
 
 from app.database import SessionLocal, init_db
+from app.dbguard import add_write_target_args, confirm_write_target
+from app.llm import anthropic_client
 from app.completeness import enumerate_completeness_work, score_outputs
 
 
@@ -38,11 +40,11 @@ def main() -> int:
         help="comma output-id allowlist (default: all eligible with a sheet)",
     )
     ap.add_argument("--scorer-version", default="completeness-v1-calib")
+    add_write_target_args(ap)
     args = ap.parse_args()
+    confirm_write_target(args, purpose="score completeness from sheets; upsert Completeness rows")
 
-    import anthropic
-
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    client = anthropic_client()
 
     def sheet_for(output_id: int) -> bytes:
         path = os.path.join(args.sheets_dir, f"{output_id}_{args.condition}.png")

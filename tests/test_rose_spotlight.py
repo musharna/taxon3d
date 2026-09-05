@@ -15,7 +15,7 @@ def test_rose_spotlight_registered():
     spot = find_spotlight("rose")
     assert spot is not None
     assert spot["task_title"] == ROSE_SUBJECT_TITLE
-    assert spot["reference_image"] == "reference/rose_ref.jpg"
+    assert spot["reference_image"] == "reference/rose_ref_clean.jpg"  # the CC photo, not the private one
 
 
 def test_rose_x_registries_cc0():

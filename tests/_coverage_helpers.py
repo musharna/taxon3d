@@ -23,7 +23,10 @@ def assert_crop_entry(entry, *, file_key=None):
     if file_key is not None:
         path = os.path.join(REPO_ROOT, entry[file_key])
         if not os.path.exists(path):
-            # data/ is gitignored runtime state; on a checkout without the runtime volume
-            # the input asset is legitimately absent — skip rather than hard-fail.
-            pytest.skip(f"runtime asset absent (gitignored): {entry[file_key]}")
+            # data/ is gitignored runtime state. Only a checkout WITHOUT the runtime volume
+            # (CI) may skip; when the tree is present a missing input is a broken registry
+            # entry and must fail loud — a per-entry skip hid exactly that.
+            if not os.path.isdir(os.path.join(REPO_ROOT, "data", "assets")):
+                pytest.skip("data/assets tree absent (gitignored runtime volume)")
+            pytest.fail(f"data/assets is present but {entry[file_key]} is missing: {path}")
         assert os.path.getsize(path) > 0, entry[file_key]

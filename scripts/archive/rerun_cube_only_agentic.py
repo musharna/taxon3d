@@ -49,7 +49,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import trimesh  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
-from scripts.strip_default_cube import classify  # noqa: E402
+from scripts.archive.strip_default_cube import classify  # noqa: E402
 
 
 def is_cube_only(path: Path) -> bool:

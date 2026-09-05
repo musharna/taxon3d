@@ -23,6 +23,7 @@ import pathlib as _pl
 _sys.path.insert(0, str(_pl.Path(__file__).resolve().parent.parent))
 
 from app.database import SessionLocal, init_db
+from app.dbguard import add_write_target_args, confirm_write_target
 
 RESULTS = "docs/results/2026-07-02-dgen-firming-results.md"
 
@@ -60,7 +61,9 @@ def main() -> int:
         action="store_true",
         help="seed dgen_baseline/ from dgen_tmp round-0 GLBs first",
     )
+    add_write_target_args(ap)
     args = ap.parse_args()
+    confirm_write_target(args, purpose="cross-judge A/B over DGenRuns; persists verdict rows")
 
     import httpx
 

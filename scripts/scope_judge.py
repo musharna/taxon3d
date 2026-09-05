@@ -140,11 +140,10 @@ def main() -> int:
         if args.dry_run:
             return 0
 
-    import anthropic
-
+    from app.llm import anthropic_client
     from scripts.judge_capture import browser_capture_multi_factory
 
-    client = anthropic.Anthropic()
+    client = anthropic_client()
 
     def classify_fn(species, prompt, sheet_b64):
         return scope.classify_scope(client, species=species, prompt=prompt, sheet_b64=sheet_b64)

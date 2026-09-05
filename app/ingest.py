@@ -59,7 +59,6 @@ def validate_asset(data: bytes, ext: str) -> dict:
 
 
 # Backwards-compatible alias.
-validate_3d_asset = validate_asset
 
 
 def _validate_mesh(data: bytes, ext: str) -> dict:
@@ -260,7 +259,7 @@ def register_output(
         )
     gen = upsert_generator(db, generator_slug, name=generator_name, paradigm=paradigm)
 
-    stats = validate_3d_asset(data, ext)
+    stats = validate_asset(data, ext)
     digest = sha256(data)
 
     # Dedup: same content for the same (task, generator) → return existing.

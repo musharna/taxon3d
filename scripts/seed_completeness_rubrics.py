@@ -21,6 +21,7 @@ import pathlib as _pl
 _sys.path.insert(0, str(_pl.Path(__file__).resolve().parent.parent))
 
 from app.database import SessionLocal, init_db
+from app.dbguard import add_write_target_args, confirm_write_target
 from app.organ_inventory import inventory_for
 
 
@@ -64,7 +65,9 @@ def main() -> int:
         default="",
         help="comma task ids (default: all tasks whose taxon has an organ inventory)",
     )
+    add_write_target_args(ap)
     args = ap.parse_args()
+    confirm_write_target(args, purpose="seed completeness-scope TraitRubric rows")
     init_db()
     with SessionLocal() as db:
         from app.models import Task

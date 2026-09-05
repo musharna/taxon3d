@@ -151,7 +151,11 @@ def _ghostcite_verify(citation: str) -> dict:
     retracted DOI makes ghostcite exit non-zero, so the verdict is driven off `findings`, NOT the
     exit code. Verified requires a clean result AND a DOI ghostcite actually recognized
     (`summary.with_doi >= 1`), so a bare title/PMID citation is not spuriously trusted.
-    Unparseable / wrong-shape output (bad flag, crash) is the real tool error → fail loud + closed."""
+    A TOOL failure is not a citation verdict. `ghostcite` missing from PATH raises (every
+    citation would otherwise silently read as unverified and the whole rubric would be dropped
+    as "uncited"); unparseable / wrong-shape output (bad flag, crash, non-zero exit with no JSON)
+    still fails closed but carries an explicit `error` so a caller can tell "the tool broke" from
+    "the DOI is bad"."""
     try:
         proc = _subprocess.run(
             ["ghostcite", "--format", "doi", "--json", "-"],
@@ -160,13 +164,21 @@ def _ghostcite_verify(citation: str) -> dict:
             text=True,
             timeout=60,
         )
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            "ghostcite is not installed (pipx install ghostcite) — refusing to score every "
+            "citation as unverified"
+        ) from e
+    try:
         data = _json.loads(proc.stdout or "")
     except Exception as e:  # noqa: BLE001 — unparseable output = tool error: fail loud + closed
-        print(f"ghostcite error on {citation!r}: {e}", file=sys.stderr)
-        return {"verified": False, "retracted": False}
+        err = f"ghostcite exit {proc.returncode}, unparseable output: {e}"
+        print(f"ghostcite error on {citation!r}: {err}", file=sys.stderr)
+        return {"verified": False, "retracted": False, "error": err}
     if not isinstance(data, dict) or "findings" not in data:
-        print(f"ghostcite unexpected output on {citation!r}: {str(data)[:200]}", file=sys.stderr)
-        return {"verified": False, "retracted": False}
+        err = f"ghostcite exit {proc.returncode}, unexpected output: {str(data)[:200]}"
+        print(f"ghostcite error on {citation!r}: {err}", file=sys.stderr)
+        return {"verified": False, "retracted": False, "error": err}
     findings = data.get("findings") or []
     if findings:
         retracted = any(
@@ -200,11 +212,10 @@ def fetch_db_traits(taxon: str) -> list[dict]:
 
 def draft_llm_traits(taxon: str) -> list[dict]:
     """llm tier: Europe PMC retrieval + Anthropic extraction. Network + API spend; --live only."""
-    import anthropic
-
+    from app.llm import anthropic_client
     from app.trait_sources import literature_grounded_traits
 
-    client = anthropic.Anthropic()
+    client = anthropic_client()
     return literature_grounded_traits(
         taxon, search_fn=_live_lit_search, resolve_fn=_live_lit_resolve, llm_client=client
     )

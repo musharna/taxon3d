@@ -29,6 +29,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 #: Read-only pages: no forms, no per-visitor content, safe for a shared cache to hold.
+#: Hand-maintained on purpose: cacheability is a per-page judgment (a route carries no
+#: "read-only" marker), so unlike the internal gate this cannot be derived from app.routes.
 PUBLIC_CACHEABLE = [
     "/",
     "/leaderboard",

@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import config, dataset  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
+from app.dbguard import add_write_target_args, confirm_write_target  # noqa: E402
 from app.storage import StorageBackend, get_storage  # noqa: E402
 from scripts.export_public import export_bundle  # noqa: E402
 
@@ -79,7 +80,9 @@ def main() -> int:
     ap.add_argument("--tasks", required=True, help="comma-separated task titles")
     ap.add_argument("--generators", required=True, help="comma-separated generator slugs")
     ap.add_argument("--out", required=True)
+    add_write_target_args(ap)
     a = ap.parse_args()
+    confirm_write_target(a, purpose=f"read the DB and write release bundle {a.version} to {a.out}")
     db = SessionLocal()
     try:
         summary = build_release(
