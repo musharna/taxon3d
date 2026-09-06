@@ -7,7 +7,7 @@ READ-ONLY against the database. Sheets come from the existing render cache
 never a silent skip — a skipped item would change the inclusion probability we just recorded.
 
 Usage (study DB, read-only):
-  BIO3D_DATABASE_URL="sqlite:///$(pwd)/data/study/arena-study.db?mode=ro&uri=true" \
+  BIO3D_DATABASE_URL="sqlite:///$(pwd)/data/study/arena-study.db" \
   BIO3D_DATA_DIR="$(pwd)/data" \
   .venv/bin/python scripts/paper/cprime_export.py --out data/paper/cprime --seed 20260905
 """
@@ -117,6 +117,24 @@ def build_populations(db: Session) -> tuple[dict[str, list[int]], dict[int, dict
     return pops, info
 
 
+def assert_frame_nonempty(pops: dict[str, list[int]]) -> None:
+    """Refuse to export from a database that contains no outputs at all.
+
+    A mistyped BIO3D_DATABASE_URL is silent, not loud: pointing SQLAlchemy at
+    `sqlite:///...db?mode=ro&uri=true` makes SQLite treat the whole string as a FILENAME, so it
+    creates a brand-new schema-only database of that literal name and every query returns
+    nothing. Without this check the export would cheerfully write a 266-item sampling plan drawn
+    from a population of zero, and the emptiness would only surface when a rater opened an empty
+    CSV. An empty frame always means the connection is wrong, never that the corpus is."""
+    if not any(pops.values()):
+        raise ValueError(
+            "refusing to export: the gate frame contains no outputs. The database is almost "
+            "certainly the wrong one — check BIO3D_DATABASE_URL, and note that SQLite query "
+            "parameters (?mode=ro&uri=true) are read as part of the FILENAME and silently "
+            "produce an empty database."
+        )
+
+
 def _write_csv(path: Path, fields: list[str], rows: list[dict]) -> None:
     with open(path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
@@ -137,6 +155,7 @@ def export(
 ) -> dict:
     targets = TARGETS if targets is None else targets
     pops, info = build_populations(db)
+    assert_frame_nonempty(pops)
     task_of = {oid: d["task_id"] for oid, d in info.items() if oid != -1}
     main = plan_sample(pops, targets, task_of=task_of, seed=seed)
     main_ids = {r["output_id"] for r in main}

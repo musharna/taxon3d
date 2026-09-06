@@ -507,7 +507,7 @@ READ-ONLY against the database. Sheets come from the existing render cache
 never a silent skip — a skipped item would change the inclusion probability we just recorded.
 
 Usage (study DB, read-only):
-  BIO3D_DATABASE_URL="sqlite:///$(pwd)/data/study/arena-study.db?mode=ro&uri=true" \
+  BIO3D_DATABASE_URL="sqlite:///$(pwd)/data/study/arena-study.db" \
   BIO3D_DATA_DIR="$(pwd)/data" \
   .venv/bin/python scripts/paper/cprime_export.py --out data/paper/cprime --seed 20260905
 """

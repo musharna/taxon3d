@@ -155,3 +155,16 @@ def test_not_admitted_with_no_verdict_at_all_counts_as_unevaluated():
         pops, info = build_populations(db)
     assert all(out.id not in ids for ids in pops.values())
     assert info[-1]["excluded_unevaluated"] >= 1
+# IRON_LAW_OK
+
+
+def test_empty_frame_is_refused_loudly():
+    """A mistyped BIO3D_DATABASE_URL does not error: SQLAlchemy happily creates a schema-only
+    SQLite file and every query returns nothing, so the export would write empty sheets and a
+    266-row plan drawn from a population of zero. Refuse instead."""
+    from scripts.paper.cprime_export import assert_frame_nonempty
+
+    with pytest.raises(ValueError, match="no outputs"):
+        assert_frame_nonempty({s: [] for s in cprime_strata.STRATA})
+    # positive control: a frame with any output at all passes
+    assert_frame_nonempty({**{s: [] for s in cprime_strata.STRATA}, "admitted": [1]}) is None

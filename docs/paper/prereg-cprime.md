@@ -82,7 +82,7 @@ and must not change):
 ```bash
 mkdir -p data/paper
 stat -c %Y data/study/arena-study.db > /tmp/cprime_mtime_before
-BIO3D_DATABASE_URL="sqlite:///$(pwd)/data/study/arena-study.db?mode=ro&uri=true" \
+BIO3D_DATABASE_URL="sqlite:///$(pwd)/data/study/arena-study.db" \
 BIO3D_DATA_DIR="$(pwd)/data" \
 timeout 300 .venv/bin/python scripts/paper/cprime_export.py \
   --out data/paper/cprime --seed 20260905 | tee data/paper/cprime/export_counts.json
