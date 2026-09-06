@@ -27,16 +27,20 @@ is not the organism). The gate does **not** judge species identity or morphologi
 
 ## 2. What exists (study DB, 2026-09-05)
 
-| fact | value |
-|---|---|
-| non-gold outputs | 940 |
-| excluded by the live gate (structural ∪ completeness ∪ semantic) | 333 |
-| of which semantic-only on outputs completeness calls `complete` — the novel stratum | 101 (multiple 49, not_the_organism 35, sub_part 17) |
-| admitted, votable, non-hidden | 552 |
-| votes with exactly one rejected side | 56, all June–July internal, 53 from one session; decisive 24 rejected / 18 admitted |
-| paid votes | 1,276 (pilot 335, wave 2 941), all criterion `overall` |
-| semantic verdicts with a cached contact sheet | 486 |
-| human admissibility labels independent of gate tuning | 0 |
+| fact                                                                                | value                                                                               |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| non-gold outputs                                                                    | 940                                                                                 |
+| excluded by the live gate (structural ∪ completeness ∪ semantic)                    | 333                                                                                 |
+| of which semantic-only on outputs completeness calls `complete` — the novel stratum | 101 (multiple 49, not_the_organism 35, sub_part 17)                                 |
+| admitted, votable, non-hidden                                                       | 552                                                                                 |
+| votes with exactly one rejected side                                                | 56, all June–July internal, 53 from one session; decisive 24 rejected / 18 admitted |
+| paid votes                                                                          | 1,276 (pilot 335, wave 2 941), all criterion `overall`                              |
+| semantic verdicts with a cached contact sheet                                       | 486                                                                                 |
+| human admissibility labels independent of gate tuning                               | 0                                                                                   |
+
+These counts are over ALL non-gold outputs, including the 123 that `hidden_at` marks as
+withdrawn. Study C′ audits the visible corpus, so its frame is smaller — 232 rejected and 552
+admitted, with the novel stratum at 79 rather than 101. See the sample table in §3.
 
 Consequences: no gate-off board exists; botanical plausibility has no paid votes; the only
 human check on the semantic gate is the 32-flag set it was tuned on. The 56 historical mixed
@@ -62,17 +66,31 @@ Two label everything; the third adjudicates disagreements blind to the gate's ve
 
 **Sample** (stratified, every stratum with its inclusion probability recorded):
 
-| stratum | population | sample |
-|---|---|---|
-| structural `degenerate_bbox` | 4 | 4 |
-| structural `empty` | 43 | 15 |
-| semantic-only on `complete` — `multiple` | 49 | 40 |
-| semantic-only on `complete` — `not_the_organism` | 35 | 30 |
-| semantic-only on `complete` — `sub_part` | 17 | 17 |
-| semantic rejects the completeness gate also catches | ~150 | 30 |
-| admitted (false-negative cell), stratified by task | 552 | 120 |
+Superseded 2026-09-06 by the measured frame. The counts below were taken before the
+`hidden_at` filter was applied, so three of them describe outputs release #161 has already
+withdrawn from the corpus; the audit's frame is the VISIBLE corpus. The live figures, measured
+by `build_populations()` and reproduced in `docs/paper/prereg-cprime.md`, are:
 
-Roughly 256 items, three labels each on the main set.
+| stratum                                               | population | sample | inclusion prob. |
+| ----------------------------------------------------- | ---------- | ------ | --------------- |
+| structural `degenerate_bbox`                          | 1          | 1      | 1.000           |
+| structural `empty`                                    | 43         | 15     | 0.349           |
+| semantic-only on `complete` — `multiple`              | 46         | 46     | 1.000           |
+| semantic-only on `complete` — `not_the_organism`      | 31         | 31     | 1.000           |
+| semantic-only on `complete` — `sub_part`              | 2          | 2      | 1.000           |
+| semantic rejects the completeness gate also catches   | 91         | 30     | 0.330           |
+| semantic rejects NOT on `complete` (`sem_only_other`) | 18         | 13     | 0.722           |
+| admitted (false-negative cell), stratified by task    | 552        | 128    | 0.232           |
+
+266 items, three labels each on the main set, plus a 20-item calibration set.
+
+Two changes from the original table, both made before any label existed. First, a
+`sem_only_other` stratum was added: 18 rejected outputs sit on `partial-organism` or carry no
+completeness row at all, and an estimate cannot omit a cell of its own population. Second,
+`degenerate_bbox` (4 → 1) and `sub_part`-on-`complete` (17 → 2) are far smaller once hidden
+outputs are excluded, so both are now sampled exhaustively and their 18 freed slots were
+reallocated to strata with headroom, holding the total at 266. `novel_sub_part` therefore rests
+on n=2; the pooled novel-stratum PPV, not that cell alone, is the go/no-go criterion.
 
 **Report.** Per stratum: PPV of the rejection, sensitivity and specificity re-weighted to the
 population, raw and class-specific agreement, and Krippendorff's α. Kappa only alongside raw
@@ -164,3 +182,9 @@ headline as the paper's frame (it becomes a descriptive section).
   colleagues plus one screened rater. Recommendation: the latter, for adjudication quality.
 - Whether `overall` should be a third criterion in A′ so the 1,276 existing paid votes become
   a comparable gated baseline. Recommendation: no; it dilutes power on the primary contrast.
+
+**Status 2026-09-06.** C′ is built and preregistered: sampling frame, exporter, statistics,
+ingest, figure, rater instructions and `docs/paper/prereg-cprime.md` are committed and tested.
+Nothing further can run until the first open question above is answered — raters are the only
+remaining input. The mechanical step before hand-off is rendering 9 missing contact sheets
+(ids listed in the prereg), after which the export command produces the blind sheets.
