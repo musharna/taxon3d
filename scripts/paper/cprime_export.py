@@ -107,7 +107,7 @@ def build_populations(db: Session) -> tuple[dict[str, list[int]], dict[int, dict
         pops[stratum].append(o.id)
         info[o.id] = {
             "task_id": o.task_id,
-            "taxon": taxon_by_task.get(o.task_id) or title_by_task.get(o.task_id, ""),
+            "taxon": clean_taxon(taxon_by_task.get(o.task_id) or title_by_task.get(o.task_id, "")),
             "asset_path": o.asset_path,
             "structural_reason": v.get("structural_reason", ""),
             "semantic_code": v.get("semantic_code") or "",
@@ -115,6 +115,15 @@ def build_populations(db: Session) -> tuple[dict[str, list[int]], dict[int, dict
             "admitted": admitted,
         }
     return pops, info
+
+
+def clean_taxon(name: str) -> str:
+    """Strip a task title's criterion suffix, leaving the organism.
+
+    Two tasks have no TraitRubric, so their taxon falls back to Task.title, which reads like
+    "Zea mays — botanical plausibility". The rater is asked about the organism; the criterion
+    name is noise on a blind sheet."""
+    return name.split(" — ", 1)[0].strip() if name else name
 
 
 def assert_frame_nonempty(pops: dict[str, list[int]]) -> None:

@@ -168,3 +168,15 @@ def test_empty_frame_is_refused_loudly():
         assert_frame_nonempty({s: [] for s in cprime_strata.STRATA})
     # positive control: a frame with any output at all passes
     assert_frame_nonempty({**{s: [] for s in cprime_strata.STRATA}, "admitted": [1]}) is None
+# IRON_LAW_OK
+
+
+def test_taxon_falls_back_to_a_bare_organism_name():
+    """Tasks without a TraitRubric fall back to Task.title, which carries a criterion suffix
+    ("Zea mays — botanical plausibility"). Raters are asked about the organism, so the suffix is
+    noise on their sheet; strip it."""
+    from scripts.paper.cprime_export import clean_taxon
+
+    assert clean_taxon("Zea mays — botanical plausibility") == "Zea mays"
+    assert clean_taxon("Zea mays") == "Zea mays"
+    assert clean_taxon("") == ""
