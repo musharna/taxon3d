@@ -186,5 +186,7 @@ headline as the paper's frame (it becomes a descriptive section).
 **Status 2026-09-06.** C′ is built and preregistered: sampling frame, exporter, statistics,
 ingest, figure, rater instructions and `docs/paper/prereg-cprime.md` are committed and tested.
 Nothing further can run until the first open question above is answered — raters are the only
-remaining input. The mechanical step before hand-off is rendering 9 missing contact sheets
-(ids listed in the prereg), after which the export command produces the blind sheets.
+remaining input. The export has since RUN: `data/paper/cprime/` holds the 266 main and 20
+calibration rows, 286 contact sheets, the blind rater sheets and the private manifest. The
+9 missing sheets the prereg lists were rendered as part of that run, so nothing mechanical
+is outstanding.
