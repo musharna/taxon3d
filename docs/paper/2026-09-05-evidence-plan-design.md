@@ -125,11 +125,15 @@ wave 2.
 effects criterion, reject code, and their interaction; random intercepts for pair and voter.
 The estimate of interest is the criterion contrast. Report with voter-clustered bootstrap CIs.
 
-**Power.** Simulated before recruitment from the fitted Bradley–Terry model and wave-2
-cluster sizes, under effect sizes 0.10, 0.15, 0.20 on the win-rate difference. The panel's
-analytic sketch puts 60:40 versus 50:50 at roughly 150–200 independent judgments per criterion
-before clustering; the simulation replaces that number. Budget is whatever the simulation
-says buys 80% power on the primary contrast, expected in the $150–300 range.
+**Power.** SIMULATED 2026-09-06; see `docs/paper/aprime-power.md` for the full result. The
+panel's analytic sketch of "150–200 independent judgments per criterion" is in the WRONG UNIT:
+criterion is assigned per voter for a whole session, so the contrast is a between-voter
+comparison and the design is powered in VOTERS. Measured, at 80% power: 60 voters (~1,230
+ballots, $128) for a 17-point marginal gap, 120 voters (~2,460 ballots, $256) for 13 points,
+240 voters ($512) for 9 points. The baseline rejected-win rate barely matters. Analysing at
+the ballot level rejects at 14.8% under the null against a nominal 5%, so voter clustering is
+not optional. **Budget 120 voters, ~$256** — inside the anticipated $150–300 range, for a
+different reason than anticipated.
 
 **Secondary.** Win rate of rejected outputs by code and criterion; the gated board from the
 filler pairs.
@@ -189,4 +193,5 @@ Nothing further can run until the first open question above is answered — rate
 remaining input. The export has since RUN: `data/paper/cprime/` holds the 266 main and 20
 calibration rows, 286 contact sheets, the blind rater sheets and the private manifest. The
 9 missing sheets the prereg lists were rendered as part of that run, so nothing mechanical
-is outstanding.
+is outstanding. A′'s power simulation has also run (§4), so the only unmet input for either
+study is C′'s raters.

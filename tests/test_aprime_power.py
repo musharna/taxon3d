@@ -108,3 +108,14 @@ def test_grid_reaches_far_enough_for_the_smallest_effect():
     from scripts.paper.aprime_power import DEFAULT_GRID
 
     assert max(DEFAULT_GRID) >= 480
+# IRON_LAW_OK
+
+
+def test_power_curve_covers_the_grid_and_rises():
+    """The figure needs the whole curve, not the three solved points; a curve that did not
+    rise with voters would mean the grid or the seed was wired wrong."""
+    from scripts.paper.aprime_power import power_curve
+
+    pts = power_curve(p_bot=0.35, delta=0.20, grid=(20, 60, 160), n_sims=250, seed=9)
+    assert [n for n, _ in pts] == [20, 60, 160]
+    assert pts[0][1] < pts[-1][1]

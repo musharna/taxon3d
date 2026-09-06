@@ -57,6 +57,12 @@ MEAN_CLUSTER = sum(WAVE2_CLUSTER_SIZES) / len(WAVE2_CLUSTER_SIZES)
 
 # Defaults for the nuisance parameters. sd_voter is the voter random-intercept SD on the logit
 # scale; 0.8 is a moderate amount of voter heterogeneity and is swept in the report.
+# 0.8 is the CONSERVATIVE planning value, not a measurement. scripts/paper/aprime_voter_sd.py
+# measures the voter random-intercept SD on wave-2's 666 decisive ballots and returns a point
+# estimate of 0.0 with a 95% upper bound of 0.5 — the expensive end is ruled out for the
+# arena's existing `overall` task. A' asks a less familiar question (botanical plausibility on
+# mixed pairs), where voters may spread out more, so the budget is planned at 0.8 and the
+# sensitivity sweep reports what 0.5 would buy.
 SD_VOTER = 0.8
 SD_PAIR = 0.5
 MIXED_FRAC = 0.6  # design target: 60% mixed pairs, 40% admitted-admitted filler
@@ -179,6 +185,19 @@ def realized_gap(
     return float(hi.mean() - lo.mean())
 
 
+def power_curve(
+    p_bot: float,
+    delta: float,
+    *,
+    grid: tuple[int, ...] = DEFAULT_GRID,
+    n_sims: int = 600,
+    seed: int = 0,
+    **kw,
+) -> list[tuple[int, float]]:
+    """Power at every grid point, for the figure."""
+    return [(n, power(n, p_bot, delta, n_sims=n_sims, seed=seed, **kw)) for n in grid]
+
+
 def solve_voters(
     p_bot: float,
     delta: float,
@@ -225,7 +244,7 @@ def main() -> int:
                 }
             )
     sens = []
-    for sd in (0.4, 0.8, 1.2):
+    for sd in (0.4, 0.5, 0.8, 1.2):
         n, p = solve_voters(0.35, 0.15, n_sims=args.sims, seed=args.seed, sd_voter=sd)
         sens.append(
             {
@@ -236,6 +255,18 @@ def main() -> int:
                 "censored": p < 0.8,
             }
         )
+
+    curve = [
+        {
+            "delta_conditional": d,
+            "gap_marginal": round(realized_gap(0.35, d, seed=args.seed), 4),
+            "points": [
+                {"voters": n, "power": round(pw, 3), "cost_usd": round(cost_for(n), 2)}
+                for n, pw in power_curve(0.35, d, n_sims=max(400, args.sims // 3), seed=args.seed)
+            ],
+        }
+        for d in deltas
+    ]
 
     out = {
         "design": {
@@ -253,6 +284,7 @@ def main() -> int:
         "seed": args.seed,
         "rows": rows,
         "sd_voter_sensitivity": sens,
+        "curve": curve,
         "wave2_reference": {
             "ballots": 943,
             "sessions": 46,

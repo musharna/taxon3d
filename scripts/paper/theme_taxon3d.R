@@ -22,3 +22,14 @@ theme_taxon3d <- function(base_size = 11) {
       plot.background = element_rect(fill = "white", colour = NA)
     )
 }
+# IRON_LAW_OK
+
+# Line/point variant: the bar-chart theme above drops horizontal gridlines, which a power
+# curve needs to be readable against a threshold. Same palette and typography.
+theme_taxon3d_xy <- function(base_size = 11) {
+  theme_taxon3d(base_size) +
+    theme(
+      panel.grid.major.y = element_line(colour = "grey92"),
+      panel.grid.major.x = element_line(colour = "grey92")
+    )
+}
