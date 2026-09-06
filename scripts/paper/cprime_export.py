@@ -46,8 +46,17 @@ CONDITION = "turntable"
 BLIND_FIELDS = ["anon_id", "taxon", "sheet_file", "label", "note"]
 MESH_FIELDS = ["anon_id", "taxon", "mesh_file", "label", "note"]
 MANIFEST_FIELDS = [
-    "anon_id", "output_id", "stratum", "inclusion_prob", "set", "task_id", "taxon", "asset_path",
-    "structural_reason", "semantic_code", "completeness_category",
+    "anon_id",
+    "output_id",
+    "stratum",
+    "inclusion_prob",
+    "set",
+    "task_id",
+    "taxon",
+    "asset_path",
+    "structural_reason",
+    "semantic_code",
+    "completeness_category",
 ]
 
 
@@ -77,7 +86,12 @@ def build_populations(db: Session) -> tuple[dict[str, list[int]], dict[int, dict
     for o in outs:
         v = verdicts.get(o.id, {})
         admitted = o.id not in rejected
-        if not admitted and not (v.get("structural_seen") and v.get("semantic_seen")):
+        if not admitted and not v.get("structural_reason") and not v.get("semantic_seen"):
+            # An output is classified by whichever predicate rejected it. A structural reject is
+            # complete on its own: the semantic judge is never run on an empty mesh, so demanding
+            # a semantic row too would drop every `empty` output out of the frame. Only when
+            # NOTHING that could explain the rejection has looked at it is it truly unevaluated —
+            # the gate failed closed on it. Count those; never classify them.
             info[-1]["excluded_unevaluated"] += 1
             continue
         try:
@@ -140,20 +154,42 @@ def export(
                 raise FileNotFoundError(f"no contact sheet for output {oid}: {src}")
             a = anon[oid]
             shutil.copyfile(src, out_dir / "sheets" / f"{a}.png")
-            manifest.append({
-                "anon_id": a, "output_id": oid, "stratum": r["stratum"],
-                "inclusion_prob": f"{r['inclusion_prob']:.6f}", "set": set_name, **info[oid],
-            })
+            manifest.append(
+                {
+                    "anon_id": a,
+                    "output_id": oid,
+                    "stratum": r["stratum"],
+                    "inclusion_prob": f"{r['inclusion_prob']:.6f}",
+                    "set": set_name,
+                    **info[oid],
+                }
+            )
     manifest.sort(key=lambda m: m["anon_id"])
     _write_csv(out_dir / "manifest.csv", MANIFEST_FIELDS, manifest)
 
     def blind(rows):
-        return [{"anon_id": m["anon_id"], "taxon": m["taxon"], "sheet_file": f"{m['anon_id']}.png",
-                 "label": "", "note": ""} for m in rows]
+        return [
+            {
+                "anon_id": m["anon_id"],
+                "taxon": m["taxon"],
+                "sheet_file": f"{m['anon_id']}.png",
+                "label": "",
+                "note": "",
+            }
+            for m in rows
+        ]
 
     def mesh(rows):
-        return [{"anon_id": m["anon_id"], "taxon": m["taxon"],
-                 "mesh_file": str(asset_dir / m["asset_path"]), "label": "", "note": ""} for m in rows]
+        return [
+            {
+                "anon_id": m["anon_id"],
+                "taxon": m["taxon"],
+                "mesh_file": str(asset_dir / m["asset_path"]),
+                "label": "",
+                "note": "",
+            }
+            for m in rows
+        ]
 
     main_rows = [m for m in manifest if m["set"] == "main"]
     calib_rows = [m for m in manifest if m["set"] == "calibration"]
@@ -173,9 +209,15 @@ def export(
     )
     per = {s: sum(1 for m in main_rows if m["stratum"] == s) for s in STRATA}
     pop_sizes = {s: len(pops[s]) for s in STRATA}
-    return {"main": len(main_rows), "calibration": len(calib_rows), "structural": len(struct_rows),
-            "sensitivity": min(sensitivity_n, len(main_rows)), "per_stratum": per,
-            "population": pop_sizes, "excluded": info[-1]}
+    return {
+        "main": len(main_rows),
+        "calibration": len(calib_rows),
+        "structural": len(struct_rows),
+        "sensitivity": min(sensitivity_n, len(main_rows)),
+        "per_stratum": per,
+        "population": pop_sizes,
+        "excluded": info[-1],
+    }
 
 
 def main() -> int:

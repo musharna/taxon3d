@@ -25,14 +25,36 @@ STRATA: tuple[str, ...] = (
 )
 
 TARGETS: dict[str, int] = {
-    "struct_degenerate_bbox": 4,
+    "struct_degenerate_bbox": 1,
     "struct_empty": 15,
-    "novel_multiple": 40,
-    "novel_not_the_organism": 30,
-    "novel_sub_part": 17,
+    "novel_multiple": 46,
+    "novel_not_the_organism": 31,
+    "novel_sub_part": 2,
     "sem_also_completeness": 30,
-    "sem_only_other": 10,
-    "admitted": 120,
+    "sem_only_other": 13,
+    "admitted": 128,
+}
+
+# Population per stratum in the live frame, measured 2026-09-06 against data/study/arena-study.db
+# via build_populations() (non-gold, hidden_at IS NULL, rejection from the app's own gate
+# composer over the full three-predicate rubric).
+#
+# The spec's original targets were sized from reject counts that did NOT filter `hidden_at`, so
+# they asked for 4 degenerate_bbox and 17 sub_part-on-complete outputs that the visible corpus no
+# longer contains — release #161 hid 3 and 15 of them respectively. Those two strata are now
+# sampled exhaustively (inclusion probability 1), and their 18 freed slots were reallocated to
+# strata that still have headroom, keeping the total at 266: the two remaining `novel` cells to
+# their full population, +3 to sem_only_other, and +8 to `admitted`, which carries the
+# false-negative rate that the second go/no-go criterion reads.
+FRAME_SIZES: dict[str, int] = {
+    "struct_degenerate_bbox": 1,
+    "struct_empty": 43,
+    "novel_multiple": 46,
+    "novel_not_the_organism": 31,
+    "novel_sub_part": 2,
+    "sem_also_completeness": 91,
+    "sem_only_other": 18,
+    "admitted": 552,
 }
 
 CALIBRATION_N = 20
@@ -107,14 +129,18 @@ def plan_sample(
             by_task: dict = defaultdict(list)
             for oid in pop:
                 by_task[task_of[oid]].append(oid)
-            alloc = _largest_remainder({t: len(v) for t, v in by_task.items()}, min(target, len(pop)))
+            alloc = _largest_remainder(
+                {t: len(v) for t, v in by_task.items()}, min(target, len(pop))
+            )
             for t in sorted(by_task, key=str):
                 k = alloc[t]
                 if k == 0:
                     continue
                 cell = by_task[t]
                 for oid in rng.sample(cell, k):
-                    rows.append({"output_id": oid, "stratum": stratum, "inclusion_prob": k / len(cell)})
+                    rows.append(
+                        {"output_id": oid, "stratum": stratum, "inclusion_prob": k / len(cell)}
+                    )
         else:
             k = min(target, len(pop))
             for oid in rng.sample(pop, k):
@@ -129,7 +155,9 @@ def draw_calibration(
     inclusion_prob is 0.0: calibration items never enter an estimate."""
     rng = random.Random(seed)
     spare = {
-        s: sorted(set(populations.get(s, [])) - main_ids) for s in STRATA if set(populations.get(s, [])) - main_ids
+        s: sorted(set(populations.get(s, [])) - main_ids)
+        for s in STRATA
+        if set(populations.get(s, [])) - main_ids
     }
     for s in spare:
         rng.shuffle(spare[s])

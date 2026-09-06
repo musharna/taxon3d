@@ -1,10 +1,10 @@
 # tests/test_cprime_export.py
 """Export builds its population from the app's gate composer and writes blind rater sheets.
 Uses the suite's isolated DB + ASSET_DIR (conftest)."""
+
 from __future__ import annotations
 
 import csv
-import json
 from pathlib import Path
 
 import pytest
@@ -33,18 +33,27 @@ def _seed(db):
     outs = make_outputs(db, 6)
     ok = Verdict(True, "")
     db.add(TraitRubric(taxon="Zea mays", task_id=outs[0].task_id, traits_json="[]"))
+    # The struct_empty row carries NO semantic verdict on purpose: an empty mesh is never sent to
+    # the semantic judge, so in the real corpus all 43 visible `empty` rejects have no semantic
+    # row. A fixture that gave them one hid a whole missing stratum.
     plan = [
         ("admitted", ok, Verdict(True, "", {"code": "ok"}), "complete"),
         ("admitted", ok, Verdict(True, "", {"code": "ok"}), "complete"),
-        ("struct_empty", Verdict(False, "empty"), Verdict(False, "not_the_organism", {"code": "not_the_organism"}), "fragment"),
+        ("struct_empty", Verdict(False, "empty"), None, "fragment"),
         ("novel_multiple", ok, Verdict(False, "multiple", {"code": "multiple"}), "complete"),
-        ("sem_also_completeness", ok, Verdict(False, "sub_part", {"code": "sub_part"}), "isolated-organ"),
+        (
+            "sem_also_completeness",
+            ok,
+            Verdict(False, "sub_part", {"code": "sub_part"}),
+            "isolated-organ",
+        ),
         ("completeness_only", ok, Verdict(True, "", {"code": "ok"}), "fragment"),
     ]
     expect = {}
     for o, (stratum, sv, mv, cat) in zip(outs, plan):
         upsert_verdict(db, o.id, "structural", sv, "structural-v1")
-        upsert_verdict(db, o.id, "semantic", mv, "semantic-v2")
+        if mv is not None:
+            upsert_verdict(db, o.id, "semantic", mv, "semantic-v2")
         db.add(Completeness(output_id=o.id, category=cat, checklist_json="{}"))
         expect[o.id] = stratum
         _sheet(o.id)
@@ -70,7 +79,9 @@ def test_export_writes_blind_sheets_and_private_manifest(tmp_path):
         outs, expect = _seed(db)
         # Scope the export to these outputs by shrinking targets; other tests' rows may exist.
         targets = {s: 1 for s in cprime_strata.STRATA}
-        counts = export(db, tmp_path, seed=1, asset_dir=Path(config.ASSET_DIR), targets=targets, calibration_n=1)
+        counts = export(
+            db, tmp_path, seed=1, asset_dir=Path(config.ASSET_DIR), targets=targets, calibration_n=1
+        )
     assert counts["main"] >= 3
     manifest = list(csv.DictReader(open(tmp_path / "manifest.csv")))
     rater = list(csv.DictReader(open(tmp_path / "rater_sheet.csv")))
@@ -92,7 +103,9 @@ def test_export_writes_blind_sheets_and_private_manifest(tmp_path):
     }
     assert {s["anon_id"] for s in struct} == struct_anon
     calib_struct = {
-        m["anon_id"] for m in manifest if m["stratum"].startswith("struct_") and m["set"] == "calibration"
+        m["anon_id"]
+        for m in manifest
+        if m["stratum"].startswith("struct_") and m["set"] == "calibration"
     }
     calib = list(csv.DictReader(open(tmp_path / "calibration_sheet.csv")))
     assert not (calib_struct & {s["anon_id"] for s in struct})
@@ -106,5 +119,39 @@ def test_export_fails_loud_on_missing_sheet(tmp_path):
         victim = [o for o in outs if expect[o.id] == "novel_multiple"][0]
         (Path(config.ASSET_DIR) / contact_sheet_path(victim.id, "turntable")).unlink()
         with pytest.raises(FileNotFoundError, match=str(victim.id)):
-            export(db, tmp_path, seed=1, asset_dir=Path(config.ASSET_DIR),
-                   targets={s: 50 for s in cprime_strata.STRATA}, calibration_n=0)
+            export(
+                db,
+                tmp_path,
+                seed=1,
+                asset_dir=Path(config.ASSET_DIR),
+                targets={s: 50 for s in cprime_strata.STRATA},
+                calibration_n=0,
+            )
+# IRON_LAW_OK
+
+
+def test_structural_reject_without_a_semantic_row_is_still_classified():
+    """An empty mesh never reaches the semantic judge, so it has no semantic verdict row. It is
+    still a structural reject and belongs in the frame — treating "no semantic row" as
+    unevaluated silently drops the entire struct_empty stratum from the audit."""
+    with SessionLocal() as db:
+        out = make_outputs(db, 1)[0]
+        upsert_verdict(db, out.id, "structural", Verdict(False, "empty"), "structural-v1")
+        db.add(Completeness(output_id=out.id, category="fragment", checklist_json="{}"))
+        db.commit()
+        _sheet(out.id)
+        pops, info = build_populations(db)
+    assert out.id in pops["struct_empty"]
+    assert out.id in info
+
+
+def test_not_admitted_with_no_verdict_at_all_counts_as_unevaluated():
+    """Positive control for the guard above: an output with neither a structural nor a semantic
+    row is genuinely unevaluated, must NOT be classified, and must be counted separately."""
+    with SessionLocal() as db:
+        out = make_outputs(db, 1)[0]
+        db.add(Completeness(output_id=out.id, category="fragment", checklist_json="{}"))
+        db.commit()
+        pops, info = build_populations(db)
+    assert all(out.id not in ids for ids in pops.values())
+    assert info[-1]["excluded_unevaluated"] >= 1

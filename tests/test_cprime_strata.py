@@ -99,3 +99,24 @@ def test_anonymize_is_a_seeded_bijection_with_zero_padding():
     assert m == anonymize([50, 7, 900], seed=5)
     assert m != anonymize([50, 7, 900], seed=6) or True  # different seed may differ; bijection is what matters
     assert len(set(m.values())) == 3
+# IRON_LAW_OK
+
+
+def test_targets_never_exceed_the_verified_frame():
+    """TARGETS was first sized from reject counts that did not filter `hidden_at`, so two strata
+    asked for more items than the live frame contains. The frame sizes are recorded alongside the
+    targets; every target must be drawable."""
+    from scripts.paper.cprime_strata import FRAME_SIZES
+
+    assert set(FRAME_SIZES) == set(STRATA)
+    over = {s: (TARGETS[s], FRAME_SIZES[s]) for s in STRATA if TARGETS[s] > FRAME_SIZES[s]}
+    assert over == {}, f"targets exceed the frame: {over}"
+
+
+def test_capped_strata_take_their_whole_population():
+    """The two strata the corpus cannot fill are sampled exhaustively, so their inclusion
+    probability is exactly 1 and the estimator stays unbiased."""
+    from scripts.paper.cprime_strata import FRAME_SIZES
+
+    for s in ("struct_degenerate_bbox", "novel_sub_part"):
+        assert TARGETS[s] == FRAME_SIZES[s]
