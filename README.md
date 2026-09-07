@@ -39,9 +39,12 @@ fidelity, not taste.
 |               |                                                                                                           |
 | ------------- | --------------------------------------------------------------------------------------------------------- |
 | **Tasks**     | 20 active, spanning plants, fungi and animals                                                             |
-| **Outputs**   | 502 votable 3D models across 56 entrants                                                                  |
+| **Outputs**   | 488 votable 3D models across 52 entrants                                                                  |
 | **Paradigms** | single-image reconstruction · text→3D · LLM-authored procedural geometry · agentic render→critique→revise |
 | **Ranking**   | Bradley–Terry (MM) with bootstrap 95% CIs, CI-grouped ranks                                               |
+
+Counts are measured from the live board by `scripts/readme_stats.py` into
+`docs/stats/readme.json`, and a test holds this table to that file.
 
 > [!NOTE]
 > **Live, and honest about what it cannot yet separate.** Ranks are grouped by
@@ -250,7 +253,7 @@ there rather than at `flyctl deploy`.
 ## Tests
 
 ```bash
-pytest -q        # ranking, vote integrity, licensing gates, scale-out seams (~1,460 tests)
+pytest -q        # ranking, vote integrity, licensing gates, scale-out seams (~2,000 tests)
 ```
 
 ## Supported 3D formats
@@ -399,8 +402,9 @@ deliberate, because the corpus is not uniformly redistributable:
 
 > The part that **is** redistributable is published separately, on the Hugging Face Hub as
 > [`musharna/taxon3d-corpus-v1`](https://huggingface.co/datasets/musharna/taxon3d-corpus-v1) —
-> 292 of 545 candidate outputs, with the admissibility verdicts that gate them. The 253 withheld
-> are itemised on the dataset card, and the split follows exactly the rule below. Every vote the
+> the redistributable subset of the corpus (the card states how many of the candidate outputs
+> ship and itemises every withheld one), with the admissibility verdicts that gate them. The
+> split follows exactly the rule below. Every vote the
 > leaderboard counts ships too (`preferences.jsonl`): a withheld side is named by output id,
 > generator and licence only, since the preference labels are ours even where the mesh is not.
 
