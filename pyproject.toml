@@ -1,6 +1,6 @@
 [project]
 name = "bio3d-arena"
-version = "0.1.0"
+version = "0.2.0"
 description = "Anonymous pairwise comparison + voting platform for biological 3D generations"
 # 3.12 is the real floor, set by the pinned scipy/tifffile in requirements.txt — not an
 # aspiration. The previous ">=3.10" was untested: no 3.10 or 3.11 environment can resolve

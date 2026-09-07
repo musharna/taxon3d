@@ -6,6 +6,7 @@ upload a tree that is not a finished export.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -110,3 +111,13 @@ def test_a_file_is_not_a_tree(tmp_path):
     f.write_text("x")
     with pytest.raises(RuntimeError, match="not a directory"):
         pub.assert_tree_complete(f)
+
+
+def test_visibility_line_reports_the_real_state():
+    from scripts.publish_hf_dataset import visibility_line
+
+    assert "PRIVATE" in visibility_line(True)
+    assert "PUBLIC" in visibility_line(False) and "PRIVATE" not in visibility_line(False)
+    # the unconditional claim is gone from the source
+    src = (Path(__file__).resolve().parent.parent / "scripts" / "publish_hf_dataset.py").read_text()
+    assert src.count("It is PRIVATE") == 1  # only inside visibility_line

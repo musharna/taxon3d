@@ -8,8 +8,36 @@ design spec (internal).
 
 ## [Unreleased]
 
-Backfilled 2026-09-04 from `git log v0.1.0..HEAD` (67 commits). Short shas; PR numbers where one
-exists.
+## [0.2.0] - 2026-09-06
+
+Everything since the first tagged release: 90 commits. The public instance ran most of it for
+weeks before the tag; the tag exists so the DOI describes code that has the session-cookie fix.
+Short shas; PR numbers where one exists.
+
+### Audit of 2026-09-06
+
+- Admin pages take the login cookie only (`POST /admin/login`); the shared token no longer
+  travels in a URL — `3278380`.
+- Nightly off-platform database backup to R2 (`.github/workflows/backup.yml`, 30-day
+  retention) and a Fly log shipper to Grafana Cloud (`deploy/log-shipper/`) — `df5370f`. Both
+  wait on secrets the runbook lists.
+- The public preferences table carried 262 pre-launch internal votes the board excludes; the
+  cohort tags lived only in the study DB. Re-exported from a tagged copy and republished
+  (1,434 → 1,172 rows) — `d27b9c7`; `scripts/reproduce_board.py` rebuilds the board from that
+  table alone and found it — `8098e36`.
+- README headline counts are measured into `docs/stats/readme.json` and held by a test
+  (502/56 was 488/52) — `6bd3a80`; CI lint had been red since `b8fab8a` on formatting —
+  `652a874`; vote status line announced to screen readers — `9252290`; June field audit
+  closed — `e032723`; July results draft marked superseded by the preregistered plan —
+  `d591665`.
+
+### Paper track
+
+- Evidence plan preregistered (`docs/paper/prereg-cprime.md`): Study C′, a held-out human
+  audit of the admissibility gate, exported blind (266 + 20 items) — `811661e` … `e20f9da`;
+  Study A′ powered in voters, not ballots (120 voters ≈ $256), with the voter heterogeneity
+  measured rather than assumed — `d482c09`, `90e6b83`.
+- Session-cookie leak in the research export fixed and deployed — `2604767` (#180).
 
 ### Infrastructure
 

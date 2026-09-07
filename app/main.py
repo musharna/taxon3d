@@ -188,7 +188,7 @@ templates.env.globals["captcha"] = lambda: {
     "site_key": config.CAPTCHA_SITE_KEY,
 }
 
-app = FastAPI(title="Taxon3D", version="0.1.0")
+app = FastAPI(title="Taxon3D", version="0.2.0")
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
 # Local backend serves assets from disk; the S3 backend serves them from the bucket/CDN.
 storage = get_storage()

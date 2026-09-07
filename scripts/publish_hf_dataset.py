@@ -127,8 +127,18 @@ def main() -> int:
         commit_message="Taxon3D corpus: admissibility-gated organism meshes and verdicts",
     )
     print(f"\nuploaded. Review at https://huggingface.co/datasets/{args.repo}")
-    print("It is PRIVATE. Flip it public yourself in Settings once you have looked it over.")
+    info = api.repo_info(repo_id=args.repo, repo_type="dataset")
+    print(visibility_line(bool(info.private)))
     return 0
+
+
+def visibility_line(private: bool) -> str:
+    """Report the repo's ACTUAL visibility after upload. This used to claim privacy
+    unconditionally, which was false from the day the dataset went public (2026-08-25) and cost
+    a verification round trip on every later publish."""
+    if private:
+        return "It is PRIVATE. Flip it public yourself in Settings once you have looked it over."
+    return "It is PUBLIC: this upload is live to anyone right now."
 
 
 if __name__ == "__main__":
