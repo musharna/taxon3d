@@ -55,5 +55,9 @@ def test_admin_actions_require_token():
 
 def test_moderation_page_lists_flagged():
     oid = _flagged_output(hidden=True)
-    r = client.get(f"/admin/moderation?token={TOKEN}")
+    from tests.admin_login_helper import login_admin
+
+    c = TestClient(app)
+    login_admin(c, TOKEN)
+    r = c.get("/admin/moderation")
     assert r.status_code == 200 and str(oid) in r.text

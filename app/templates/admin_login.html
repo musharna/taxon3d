@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Admin login · Taxon3D{% endblock %}
+{% block content %}
+<section class="admin">
+  <h2>Admin login</h2>
+  <p class="subtle">
+    The token is sent once, in this form's body, and exchanged for an 8-hour cookie. It never
+    goes in a URL.
+  </p>
+  <form method="post" action="/admin/login" class="card">
+    <input type="hidden" name="next" value="{{ next }}" />
+    <label class="token-row">Admin token
+      <input type="password" name="token" placeholder="admin token" required autofocus />
+    </label>
+    <button type="submit">Log in</button>
+  </form>
+</section>
+{% endblock %}

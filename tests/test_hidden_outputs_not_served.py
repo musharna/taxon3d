@@ -88,9 +88,17 @@ def test_an_admin_can_still_fetch_a_hidden_output(visible_output, monkeypatch):
     _hide(oid)
 
     assert client.get(f"/media/o/{oid}.glb").status_code == 404
-    assert client.get(f"/media/o/{oid}.glb?token={ADMIN_TOKEN}").status_code == 200
-    # A wrong token is not a bypass.
-    assert client.get(f"/media/o/{oid}.glb?token=wrong").status_code == 404
+    # The token on the URL is no longer a bypass: a secret in a URL leaks through history,
+    # Referer and proxy logs. The login cookie is.
+    assert client.get(f"/media/o/{oid}.glb?token={ADMIN_TOKEN}").status_code == 404
+    from tests.admin_login_helper import login_admin
+
+    c = TestClient(app)
+    login_admin(c, ADMIN_TOKEN)
+    assert c.get(f"/media/o/{oid}.glb").status_code == 200
+    # A wrong cookie is not a bypass either.
+    c.cookies.set("bio3d_admin", "wrong")
+    assert c.get(f"/media/o/{oid}.glb").status_code == 404
 
 
 def test_the_lod_route_hides_too(visible_output):

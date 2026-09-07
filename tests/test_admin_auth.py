@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app import config
 from app.main import app
+from tests.admin_login_helper import login_admin
 
 client = TestClient(app)
 
@@ -14,14 +15,19 @@ client = TestClient(app)
 def test_admin_page_requires_token():
     assert client.get("/admin").status_code == 401
     assert client.get("/admin", params={"token": "wrong"}).status_code == 401
-    assert client.get("/admin", params={"token": config.ADMIN_TOKEN}).status_code == 200
+    # the token is not accepted on the URL either; only the login cookie opens the page
+    assert client.get("/admin", params={"token": config.ADMIN_TOKEN}).status_code == 401
+    c = TestClient(app)
+    login_admin(c, config.ADMIN_TOKEN)
+    assert c.get("/admin").status_code == 200
 
 
 def test_moderation_page_requires_token():
     assert client.get("/admin/moderation").status_code == 401
     assert client.get("/admin/moderation", params={"token": "wrong"}).status_code == 401
-    r = client.get("/admin/moderation", params={"token": config.ADMIN_TOKEN})
-    assert r.status_code == 200
+    c = TestClient(app)
+    login_admin(c, config.ADMIN_TOKEN)
+    assert c.get("/admin/moderation").status_code == 200
 
 
 def test_approve_redirect_carries_token():

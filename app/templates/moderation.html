@@ -63,20 +63,12 @@
         <td>
           {% if f.hidden %}
           <form method="post" action="/admin/outputs/{{ f.id }}/restore">
-            <input
-              type="hidden"
-              name="token"
-              value="{{ request.query_params.get('token', '') }}"
-            />
+            <input type="hidden" name="token" class="token-mirror" />
             <button type="submit">Restore</button>
           </form>
           {% else %}
           <form method="post" action="/admin/outputs/{{ f.id }}/hide">
-            <input
-              type="hidden"
-              name="token"
-              value="{{ request.query_params.get('token', '') }}"
-            />
+            <input type="hidden" name="token" class="token-mirror" />
             <button type="submit">Confirm-hide</button>
           </form>
           {% endif %}

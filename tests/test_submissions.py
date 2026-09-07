@@ -117,4 +117,8 @@ def test_submit_and_moderation_pages_render():
     assert "Submit a model" in client.get("/submit").text
     # Moderation page is token-gated (renders submitter PII + un-vetted asset URLs).
     assert client.get("/admin/moderation").status_code == 401
-    assert client.get("/admin/moderation", params={"token": "test-token"}).status_code == 200
+    from tests.admin_login_helper import login_admin
+
+    c = TestClient(app)
+    login_admin(c, "test-token")
+    assert c.get("/admin/moderation").status_code == 200

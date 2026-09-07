@@ -11,6 +11,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.admin_login_helper import login_admin
 from app.seed import seed_all
 
 client = TestClient(app)
@@ -35,7 +36,9 @@ def test_admin_not_in_public_nav():
     assert 'href="/admin"' not in nav
     # the admin route stays reachable by direct URL — but only with the admin token
     assert client.get("/admin").status_code == 401
-    assert client.get("/admin", params={"token": "test-token"}).status_code == 200
+    c = TestClient(app)
+    login_admin(c, "test-token")
+    assert c.get("/admin").status_code == 200
 
 
 def test_favicon_link_present_and_served():

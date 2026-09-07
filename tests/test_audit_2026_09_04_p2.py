@@ -48,8 +48,10 @@ def test_moderation_actions_do_not_put_the_token_in_the_redirect_url():
     )
     if r.status_code == 303:
         assert config.ADMIN_TOKEN not in r.headers["location"]
-    # positive control: after a token-bearing GET, the page is reachable WITHOUT the query token
-    assert c.get("/admin/moderation", params={"token": config.ADMIN_TOKEN}).status_code == 200
+    # positive control: after the login POST, the page is reachable with no token anywhere
+    from tests.admin_login_helper import login_admin
+
+    login_admin(c, config.ADMIN_TOKEN)
     assert c.get("/admin/moderation").status_code == 200
     # and a fresh client with neither cookie nor token is still refused
     assert TestClient(app).get("/admin/moderation").status_code == 401

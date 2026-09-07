@@ -1017,12 +1017,46 @@ def require_admin_header(x_admin_token: str | None = Header(default=None)) -> No
     _require_admin(x_admin_token)
 
 
-def require_admin_query(request: Request, token: str | None = None) -> None:
-    """Dependency for admin HTML pages (token via ?token= query, or the admin cookie the
-    moderation page sets after one such visit). These GET pages render admin/moderation data
-    (incl. submitter PII + un-vetted asset URLs), so they must not be world-readable even though
-    the mutating POSTs are already token-gated."""
-    _require_admin(_admin_token_of(request, token))
+def require_admin_cookie(request: Request) -> None:
+    """Dependency for admin HTML pages: the admin cookie set by `POST /admin/login`, and nothing
+    else. These GET pages render admin/moderation data (incl. submitter PII + un-vetted asset
+    URLs), so they must not be world-readable even though the mutating POSTs are token-gated.
+
+    Until 2026-09-06 these pages also took `?token=`. A secret in a URL is a secret in browser
+    history, in the Referer header of every asset the page loads, and in every proxy log between
+    the operator and this process; the cookie path already existed, so the query form is gone."""
+    _require_admin(request.cookies.get(ADMIN_COOKIE))
+
+
+_ADMIN_NEXT_ALLOWED = ("/admin", "/admin/moderation")
+
+
+def _set_admin_cookie(resp: Response, request: Request) -> None:
+    resp.set_cookie(
+        ADMIN_COOKIE,
+        config.ADMIN_TOKEN,
+        httponly=True,
+        samesite="strict",
+        secure=request.url.scheme == "https",
+        max_age=8 * 3600,
+    )
+
+
+@app.get("/admin/login", response_class=HTMLResponse)
+def admin_login_page(request: Request, next: str = "/admin"):
+    return templates.TemplateResponse(request, "admin_login.html", {"next": next})
+
+
+@app.post("/admin/login")
+def admin_login(request: Request, token: str = Form(...), next: str = Form("/admin")):
+    """Exchange the admin token, sent once in a POST body, for the admin cookie. `next` is
+    restricted to admin paths: an open redirect here would turn a phishing link into a bounce
+    through a logged-in operator."""
+    _require_admin(token)
+    target = next if next in _ADMIN_NEXT_ALLOWED else "/admin"
+    resp = RedirectResponse(target, status_code=303)
+    _set_admin_cookie(resp, request)
+    return resp
 
 
 def require_internal_pages() -> None:
@@ -1553,12 +1587,12 @@ def _withheld(o: ModelOutput, token: str | None) -> bool:
     route is not withholding.
 
     Admins keep access because moderation has to be able to look at what it just hid, and
-    /admin/moderation renders these same assets; the bypass reuses the existing `?token=`
-    convention rather than inventing a second one.
+    /admin/moderation renders these same assets; the bypass is the admin cookie that
+    `POST /admin/login` sets, never a query parameter (a URL is not a place for a secret).
     """
     if o.hidden_at is None:
         return False
-    return not token or token != config.ADMIN_TOKEN
+    return not token or not hmac.compare_digest(token, config.ADMIN_TOKEN)
 
 
 @app.get("/media/o/{output_id}.lod.{ext}")
@@ -1566,7 +1600,6 @@ def media_asset_lod(
     output_id: int,
     ext: str,
     request: Request,
-    token: str | None = None,
     db: Session = Depends(get_db),
 ):
     """The low-detail companion mesh, when the release pipeline produced one.
@@ -1584,7 +1617,7 @@ def media_asset_lod(
     o = db.get(ModelOutput, output_id)
     # A withheld output answers exactly like one that never existed: these URLs are deliberately
     # opaque and output-scoped, so 403 would confirm the id is real.
-    if o is None or _withheld(o, token):
+    if o is None or _withheld(o, request.cookies.get(ADMIN_COOKIE)):
         raise HTTPException(404, "Unknown output")
     rel = mesh_lod.lod_path(o.asset_path)
     if not storage.exists(rel):
@@ -1611,7 +1644,6 @@ def media_asset(
     output_id: int,
     ext: str,
     request: Request,
-    token: str | None = None,
     db: Session = Depends(get_db),
 ):
     """Resolve an opaque, output-scoped asset URL (emitted by _arena_asset_url) back to the real
@@ -1619,7 +1651,7 @@ def media_asset(
     `ext` is cosmetic (helps 3D viewers). Streams through the app on remote (S3) storage so the
     object key — which can encode identity — is never revealed to the client either."""
     o = db.get(ModelOutput, output_id)
-    if o is None or _withheld(o, token):
+    if o is None or _withheld(o, request.cookies.get(ADMIN_COOKIE)):
         raise HTTPException(404, "Unknown output")
     ctype = content_type_for(o.asset_path)
     if getattr(storage, "remote", False):
@@ -3248,7 +3280,7 @@ def spotlight_page(slug: str, request: Request, db: Session = Depends(get_db)):
 # ------------------------------------------------------------------------ admin
 
 
-@app.get("/admin", response_class=HTMLResponse, dependencies=[Depends(require_admin_query)])
+@app.get("/admin", response_class=HTMLResponse, dependencies=[Depends(require_admin_cookie)])
 def admin_page(request: Request, db: Session = Depends(get_db)):
     ctx = {
         "categories": db.execute(select(Category)).scalars().all(),
@@ -3838,7 +3870,7 @@ def api_submissions(db: Session = Depends(get_db), status: str | None = None):
 @app.get(
     "/admin/moderation",
     response_class=HTMLResponse,
-    dependencies=[Depends(require_admin_query)],
+    dependencies=[Depends(require_admin_cookie)],
 )
 def moderation_page(request: Request, db: Session = Depends(get_db)):
     pending = submissions.list_submissions(db, status="pending")
@@ -3880,15 +3912,6 @@ def moderation_page(request: Request, db: Session = Depends(get_db)):
     resp = templates.TemplateResponse(
         request, "moderation.html", {"pending": rows, "flagged": flagged}
     )
-    if request.query_params.get("token"):
-        resp.set_cookie(
-            ADMIN_COOKIE,
-            config.ADMIN_TOKEN,
-            httponly=True,
-            samesite="strict",
-            secure=request.url.scheme == "https",
-            max_age=8 * 3600,
-        )
     return resp
 
 
