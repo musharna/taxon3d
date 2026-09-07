@@ -319,14 +319,36 @@ exit code. `flyctl` lives in `~/.fly/bin`, which the script adds to `PATH`.
 
 ### Backup
 
-**The pull script is the backup.** Fly's volume snapshots are daily with 5-day retention and
-there is no replica, so anything older than five days that was never pulled is unrecoverable if
-the volume is lost. `data/prod-pulls/` is gitignored (`/data/`), so pulls live only on the
-machine that pulled them — keep them somewhere durable too.
+**Nightly, off-platform, automatic since 2026-09-06:** `.github/workflows/backup.yml` runs the
+pull script at 03:17 EDT and ships the file to a private R2 bucket (`scripts/backup_to_r2.py`,
+30-day retention, never fewer than 7 copies). Fly's volume snapshots (daily, 5-day retention, no
+replica) are the only other copy. Before the workflow existed the only off-platform copy was
+whatever a human last pulled by hand.
 
-Cadence: **weekly while traffic is ambient, and the same day any recruited wave completes**
-(paid votes are 15 specific strangers' judgements and cannot be re-collected at any price).
-Always before a release, and before any `sftp put` onto the volume (next section).
+Setting it up once (repository secrets — this repo is public, nothing goes in code):
+
+1. `fly tokens create deploy -a bio3d-arena` → `FLY_API_TOKEN`. Confirm it can `fly ssh console`;
+   a token that cannot open a console fails the run at the VACUUM step, loudly.
+2. In Cloudflare R2: a NEW private bucket (not the public mesh bucket) → `BACKUP_S3_BUCKET`; an
+   API token scoped to it with Object Read & Write → `AWS_ACCESS_KEY_ID` /
+   `AWS_SECRET_ACCESS_KEY`; the account endpoint → `BACKUP_S3_ENDPOINT`.
+3. Run it once by hand (Actions → backup-prod-db → Run workflow) and read the log: it prints
+   the vote/comparison/voter_session counts, the sha256, and `kept N copies`.
+
+**A green run is not the check.** Once a month, download the newest object and open it:
+`sqlite3 arena.<stamp>.db "PRAGMA integrity_check; SELECT count(*) FROM vote"`. A backup that
+has never been restored is a hope.
+
+Manual pulls still matter: **the same day any recruited wave completes** (paid votes cannot be
+re-collected at any price), before a release, and before any `sftp put` onto the volume (next
+section). `data/prod-pulls/` is gitignored (`/data/`).
+
+### Logs
+
+Fly retains ~100 lines per machine. `deploy/log-shipper/fly.toml` is a second, tiny Fly app
+(Fly's own Vector-based shipper) that forwards every line to Grafana Cloud Loki; the file's header
+is the whole setup. Without it a 5xx spike is undiagnosable after the fact (2026-08-21), and any
+traffic push is flying blind.
 
 ### Rebuilding the production database from a bundle
 

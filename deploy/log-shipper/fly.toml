@@ -1,0 +1,31 @@
+# Ships every log line from the bio3d-arena machine to Grafana Cloud Loki.
+#
+# Fly keeps roughly the last 100 lines per machine and nothing else; on 2026-08-21 a 1.6% 5xx
+# rate in zone analytics could not be diagnosed because the evidence was already gone. This is
+# Fly's own log-shipper (Vector reading the NATS log stream), run as a second tiny app.
+#
+# Deploy once, from this directory:
+#   fly apps create bio3d-log-shipper
+#   fly secrets set -a bio3d-log-shipper \
+#     ORG=<your fly org slug> \
+#     ACCESS_TOKEN=$(fly tokens create readonly) \
+#     LOKI_URL=https://logs-prod-<n>.grafana.net \
+#     LOKI_USERNAME=<Grafana Cloud Loki user id> \
+#     LOKI_PASSWORD=<Grafana Cloud API token with logs:write>
+#   fly deploy -a bio3d-log-shipper
+#
+# Then in Grafana: Explore → Loki → {fly_app_name="bio3d-arena"}. The shipper sees lines from the
+# moment it connects; it cannot backfill. Grafana Cloud's free tier is 50 GB/month, 14-day
+# retention — orders of magnitude above this site's volume.
+app = "bio3d-log-shipper"
+primary_region = "ord"
+
+[build]
+  image = "flyio/log-shipper:latest"
+
+[env]
+  SUBJECT = "logs.>"   # every app in the org; filter in Grafana by fly_app_name
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

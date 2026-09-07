@@ -1,0 +1,46 @@
+# Nightly off-platform copy of the production database.
+#
+# Prod is one SQLite file on one Fly volume in one region; Fly's own snapshots are daily with
+# 5-day retention. Until 2026-09-06 the only other copy was whatever a human last pulled by hand.
+# This runs scripts/pull_prod_db.sh (VACUUM INTO over `fly ssh`, never a byte copy of a WAL
+# database) and ships the file to an R2 bucket with 30-day retention (floor of 7 copies).
+#
+# Secrets (repository secrets; this repo is public, so never in code):
+#   FLY_API_TOKEN            `fly tokens create deploy -a bio3d-arena` (needs ssh)
+#   BACKUP_S3_ENDPOINT       https://<account-id>.r2.cloudflarestorage.com
+#   BACKUP_S3_BUCKET         a PRIVATE bucket, distinct from the public mesh bucket
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY   an R2 API token scoped to that bucket
+name: backup-prod-db
+on:
+  schedule:
+    - cron: "17 7 * * *" # 07:17 UTC daily = 03:17 EDT; off the hour to dodge the GitHub cron rush
+  workflow_dispatch:
+concurrency:
+  group: backup-prod-db
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install "boto3==1.43.83"  # same pin as requirements-scale.txt
+      - name: Pull a consistent snapshot off the volume
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          mkdir -p "$HOME/.fly/bin" && ln -sf "$(command -v flyctl)" "$HOME/.fly/bin/flyctl"
+          scripts/pull_prod_db.sh --dest "$RUNNER_TEMP/arena.$(date -u +%Y%m%dT%H%M%SZ).db"
+      - name: Upload to R2 and prune past 30 days
+        env:
+          BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: python scripts/backup_to_r2.py "$RUNNER_TEMP"/arena.*.db --keep-days 30
