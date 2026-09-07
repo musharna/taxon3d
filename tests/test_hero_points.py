@@ -95,7 +95,9 @@ def test_crop_base_removes_low_end_and_keeps_cap():
 _REAL_GT_GLB = Path(__file__).resolve().parent.parent / "data" / "assets" / "gt" / "zea_mays.glb"
 
 
-@pytest.mark.skipif(not _REAL_GT_GLB.exists(), reason=f"GT scan absent (gitignored): {_REAL_GT_GLB}")
+@pytest.mark.skipif(
+    not _REAL_GT_GLB.exists(), reason=f"GT scan absent (gitignored): {_REAL_GT_GLB}"
+)
 def test_points_glb_parses_real_gt_scan():
     data = _REAL_GT_GLB.read_bytes()
     pts = hp.points_arrays(data)

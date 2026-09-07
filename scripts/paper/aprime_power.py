@@ -156,9 +156,7 @@ def power(
     **kw,
 ) -> float:
     rng = np.random.default_rng(seed)
-    hits = sum(
-        simulate_trial(n_voters, p_bot, delta, rng=rng, **kw) < alpha for _ in range(n_sims)
-    )
+    hits = sum(simulate_trial(n_voters, p_bot, delta, rng=rng, **kw) < alpha for _ in range(n_sims))
     return hits / n_sims
 
 

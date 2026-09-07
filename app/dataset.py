@@ -26,7 +26,6 @@ from .models import (
 )
 
 
-
 def voter_pseudonym(session_id: str) -> str:
     """Stable per-voter identifier that is NOT the voter's credential.
 
@@ -37,6 +36,7 @@ def voter_pseudonym(session_id: str) -> str:
     brute-forced back from a truncated SHA-256, so no server-side secret is needed.
     """
     return hashlib.sha256(session_id.encode()).hexdigest()[:16]
+
 
 def build_preference_records(
     db: Session, comparison_ids: set[int] | None = None, kingdom: str | None = None

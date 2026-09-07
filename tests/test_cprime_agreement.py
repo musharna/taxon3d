@@ -24,7 +24,13 @@ def test_alpha_hand_computed_two_raters():
 
 
 def test_alpha_ignores_missing_and_single_valued_units():
-    with_missing = [["a", "a", None], ["b", "b", None], ["a", "b", None], ["b", "a", None], ["a", None, None]]
+    with_missing = [
+        ["a", "a", None],
+        ["b", "b", None],
+        ["a", "b", None],
+        ["b", "a", None],
+        ["a", None, None],
+    ]
     assert krippendorff_alpha_nominal(with_missing) == pytest.approx(0.125, abs=1e-6)
 
 
@@ -65,4 +71,6 @@ def test_ht_rate_reweights_by_inclusion_prob():
 
 def test_ht_rate_skips_zero_inclusion_prob_items():
     items = [{"inclusion_prob": 0.0, "pos": True}, {"inclusion_prob": 1.0, "pos": False}]
-    assert ht_rate(items, numerator=lambda i: i["pos"], denominator=lambda i: True) == pytest.approx(0.0)
+    assert ht_rate(
+        items, numerator=lambda i: i["pos"], denominator=lambda i: True
+    ) == pytest.approx(0.0)

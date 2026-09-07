@@ -37,6 +37,7 @@ from app.models import (  # noqa: E402
 from app.dbguard import add_write_target_args, confirm_write_target  # noqa: E402
 from app.sourcing import is_reference_scan, is_untextured_output  # noqa: E402
 
+
 def _vote_excluded(o: ModelOutput) -> bool:
     """Same exclusion the perceptual vote pool uses: raw scans + untextured blobs."""
     return is_reference_scan(o.source) or is_untextured_output(o)

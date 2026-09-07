@@ -54,9 +54,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     add_write_target_args(ap)
     args = ap.parse_args()
-    confirm_write_target(
-        args, purpose=f"init_db() (creates missing tables) and write {RESULTS}"
-    )
+    confirm_write_target(args, purpose=f"init_db() (creates missing tables) and write {RESULTS}")
     init_db()
     cal = _load_calibration_rows()
     gt = gt_by_output(cal)

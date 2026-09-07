@@ -63,10 +63,12 @@ def test_more_voter_heterogeneity_costs_power():
 def test_more_ballots_per_voter_helps_far_less_than_more_voters():
     """The design consequence: criterion is between-voter, so buying ballots from the same
     people is a weak lever compared with buying more people."""
-    more_ballots = power(n_voters=30, ballots_per_voter=40, p_bot=0.35, delta=0.15,
-                         n_sims=400, seed=5)
-    more_voters = power(n_voters=60, ballots_per_voter=20, p_bot=0.35, delta=0.15,
-                        n_sims=400, seed=5)
+    more_ballots = power(
+        n_voters=30, ballots_per_voter=40, p_bot=0.35, delta=0.15, n_sims=400, seed=5
+    )
+    more_voters = power(
+        n_voters=60, ballots_per_voter=20, p_bot=0.35, delta=0.15, n_sims=400, seed=5
+    )
     assert more_voters > more_ballots
 
 
@@ -84,10 +86,13 @@ def test_simulate_trial_returns_a_valid_p_value():
 
 
 def test_solve_voters_finds_the_smallest_grid_point_reaching_target_power():
-    n, p = solve_voters(p_bot=0.35, delta=0.20, target=0.8, grid=(20, 40, 60, 80, 120),
-                        n_sims=300, seed=8)
+    n, p = solve_voters(
+        p_bot=0.35, delta=0.20, target=0.8, grid=(20, 40, 60, 80, 120), n_sims=300, seed=8
+    )
     assert n in (20, 40, 60, 80, 120)
     assert p >= 0.8 or n == 120
+
+
 # IRON_LAW_OK
 
 
@@ -108,6 +113,8 @@ def test_grid_reaches_far_enough_for_the_smallest_effect():
     from scripts.paper.aprime_power import DEFAULT_GRID
 
     assert max(DEFAULT_GRID) >= 480
+
+
 # IRON_LAW_OK
 
 

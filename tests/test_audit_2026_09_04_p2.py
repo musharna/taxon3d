@@ -20,6 +20,7 @@ def setup_module(_m):
 
 # --- admin token -----------------------------------------------------------------------------
 
+
 def test_admin_token_compare_is_constant_time(monkeypatch):
     import hmac
 
@@ -56,6 +57,7 @@ def test_moderation_actions_do_not_put_the_token_in_the_redirect_url():
 
 # --- upload cap ------------------------------------------------------------------------------
 
+
 def test_submit_rejects_oversized_upload(monkeypatch):
     monkeypatch.setattr(config, "SUBMIT_MAX_BYTES", 1024)
     monkeypatch.setattr(config, "REQUIRE_CAPTCHA", False)
@@ -69,6 +71,7 @@ def test_submit_rejects_oversized_upload(monkeypatch):
 
 
 # --- vote race ---------------------------------------------------------------------------------
+
 
 def test_concurrent_double_vote_is_409_not_500(monkeypatch):
     with SessionLocal() as db:
@@ -94,6 +97,7 @@ def test_concurrent_double_vote_is_409_not_500(monkeypatch):
 
 # --- research JSON gating ----------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("path", ["/api/completeness.json", "/api/dgen.json"])
 def test_research_json_is_internal_only(monkeypatch, path):
     monkeypatch.setattr(config, "INTERNAL_PAGES_ENABLED", False)
@@ -103,6 +107,7 @@ def test_research_json_is_internal_only(monkeypatch, path):
 
 
 # --- /api/next limiter -------------------------------------------------------------------------
+
 
 def test_api_next_is_rate_limited_per_ip(monkeypatch):
     monkeypatch.setattr(integrity, "check_next_rate_limit", lambda ip: False)
@@ -122,6 +127,7 @@ def test_rate_limiter_forgets_idle_keys():
 
 # --- verified leaderboard memo -----------------------------------------------------------------
 
+
 def test_verified_leaderboard_reuses_bt_fit_until_votes_change(monkeypatch):
     from app import ranking
 
@@ -140,6 +146,7 @@ def test_verified_leaderboard_reuses_bt_fit_until_votes_change(monkeypatch):
 
 
 # --- duplicated constant -----------------------------------------------------------------------
+
 
 def test_completeness_uses_the_vote_roster_constant():
     import inspect

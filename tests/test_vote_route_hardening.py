@@ -63,10 +63,13 @@ def test_kvote_on_another_sessions_ballot_is_refused():
     assert r.status_code == 403, r.text
 
 
-@pytest.mark.parametrize("route,payload", [
-    ("/api/vote", {"comparison_id": 1, "winner": "a"}),
-    ("/api/kvote", {"ballot_id": 1, "best_output_id": None}),
-])
+@pytest.mark.parametrize(
+    "route,payload",
+    [
+        ("/api/vote", {"comparison_id": 1, "winner": "a"}),
+        ("/api/kvote", {"ballot_id": 1, "best_output_id": None}),
+    ],
+)
 def test_rate_limit_is_checked_before_captcha(monkeypatch, route, payload):
     calls = {"captcha": 0}
 

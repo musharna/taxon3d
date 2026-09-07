@@ -23,16 +23,96 @@ def test_strata_names_and_targets_align():
 @pytest.mark.parametrize(
     "kw,expected",
     [
-        (dict(admitted=True, structural_reason="", semantic_code="ok", completeness_category="complete"), "admitted"),
-        (dict(admitted=False, structural_reason="degenerate_bbox", semantic_code=None, completeness_category=None), "struct_degenerate_bbox"),
-        (dict(admitted=False, structural_reason="empty", semantic_code="not_the_organism", completeness_category="fragment"), "struct_empty"),
-        (dict(admitted=False, structural_reason="", semantic_code="multiple", completeness_category="complete"), "novel_multiple"),
-        (dict(admitted=False, structural_reason="", semantic_code="not_the_organism", completeness_category="complete"), "novel_not_the_organism"),
-        (dict(admitted=False, structural_reason="", semantic_code="sub_part", completeness_category="complete"), "novel_sub_part"),
-        (dict(admitted=False, structural_reason="", semantic_code="sub_part", completeness_category="isolated-organ"), "sem_also_completeness"),
-        (dict(admitted=False, structural_reason="", semantic_code="multiple", completeness_category="fragment"), "sem_also_completeness"),
-        (dict(admitted=False, structural_reason="", semantic_code="multiple", completeness_category="partial-organism"), "sem_only_other"),
-        (dict(admitted=False, structural_reason="", semantic_code="multiple", completeness_category=None), "sem_only_other"),
+        (
+            dict(
+                admitted=True,
+                structural_reason="",
+                semantic_code="ok",
+                completeness_category="complete",
+            ),
+            "admitted",
+        ),
+        (
+            dict(
+                admitted=False,
+                structural_reason="degenerate_bbox",
+                semantic_code=None,
+                completeness_category=None,
+            ),
+            "struct_degenerate_bbox",
+        ),
+        (
+            dict(
+                admitted=False,
+                structural_reason="empty",
+                semantic_code="not_the_organism",
+                completeness_category="fragment",
+            ),
+            "struct_empty",
+        ),
+        (
+            dict(
+                admitted=False,
+                structural_reason="",
+                semantic_code="multiple",
+                completeness_category="complete",
+            ),
+            "novel_multiple",
+        ),
+        (
+            dict(
+                admitted=False,
+                structural_reason="",
+                semantic_code="not_the_organism",
+                completeness_category="complete",
+            ),
+            "novel_not_the_organism",
+        ),
+        (
+            dict(
+                admitted=False,
+                structural_reason="",
+                semantic_code="sub_part",
+                completeness_category="complete",
+            ),
+            "novel_sub_part",
+        ),
+        (
+            dict(
+                admitted=False,
+                structural_reason="",
+                semantic_code="sub_part",
+                completeness_category="isolated-organ",
+            ),
+            "sem_also_completeness",
+        ),
+        (
+            dict(
+                admitted=False,
+                structural_reason="",
+                semantic_code="multiple",
+                completeness_category="fragment",
+            ),
+            "sem_also_completeness",
+        ),
+        (
+            dict(
+                admitted=False,
+                structural_reason="",
+                semantic_code="multiple",
+                completeness_category="partial-organism",
+            ),
+            "sem_only_other",
+        ),
+        (
+            dict(
+                admitted=False,
+                structural_reason="",
+                semantic_code="multiple",
+                completeness_category=None,
+            ),
+            "sem_only_other",
+        ),
     ],
 )
 def test_assign_stratum(kw, expected):
@@ -43,7 +123,12 @@ def test_assign_stratum_rejects_completeness_only_reject():
     # An output the completeness gate alone rejects (semantic said ok) is not in C′'s
     # population — the spec audits the semantic and structural predicates. Fail loud.
     with pytest.raises(ValueError):
-        assign_stratum(admitted=False, structural_reason="", semantic_code="ok", completeness_category="fragment")
+        assign_stratum(
+            admitted=False,
+            structural_reason="",
+            semantic_code="ok",
+            completeness_category="fragment",
+        )
 
 
 def test_plan_sample_sizes_and_inclusion_probs():
@@ -97,8 +182,12 @@ def test_anonymize_is_a_seeded_bijection_with_zero_padding():
     m = anonymize([50, 7, 900], seed=5)
     assert sorted(m.values()) == ["c001", "c002", "c003"]
     assert m == anonymize([50, 7, 900], seed=5)
-    assert m != anonymize([50, 7, 900], seed=6) or True  # different seed may differ; bijection is what matters
+    assert (
+        m != anonymize([50, 7, 900], seed=6) or True
+    )  # different seed may differ; bijection is what matters
     assert len(set(m.values())) == 3
+
+
 # IRON_LAW_OK
 
 

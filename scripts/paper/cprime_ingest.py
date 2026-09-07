@@ -42,7 +42,9 @@ def read_labels(path: Path) -> dict[str, str]:
         for i, row in enumerate(csv.DictReader(f), start=2):
             label = (row.get("label") or "").strip().lower()
             if label not in CODES:
-                raise ValueError(f"{path}:{i} anon_id={row.get('anon_id')} has label {label!r}; allowed {CODES}")
+                raise ValueError(
+                    f"{path}:{i} anon_id={row.get('anon_id')} has label {label!r}; allowed {CODES}"
+                )
             out[row["anon_id"]] = label
     return out
 
@@ -69,7 +71,9 @@ def human_inadmissible(label: str) -> bool | None:
     return None
 
 
-def estimate(manifest_rows: list[dict], final: dict[str, dict], r1: dict, r2: dict, r3: dict | None = None) -> dict:
+def estimate(
+    manifest_rows: list[dict], final: dict[str, dict], r1: dict, r2: dict, r3: dict | None = None
+) -> dict:
     main = [m for m in manifest_rows if m["set"] == "main"]
     calib = [m for m in manifest_rows if m["set"] == "calibration"]
     items = []
@@ -83,8 +87,14 @@ def estimate(manifest_rows: list[dict], final: dict[str, dict], r1: dict, r2: di
         if hi is None:
             n_indet += 1
             continue
-        items.append({**m, "inclusion_prob": float(m["inclusion_prob"]), "human_inadmissible": hi,
-                      "gate_rejected": m["stratum"] != "admitted"})
+        items.append(
+            {
+                **m,
+                "inclusion_prob": float(m["inclusion_prob"]),
+                "human_inadmissible": hi,
+                "gate_rejected": m["stratum"] != "admitted",
+            }
+        )
 
     per: dict[str, dict] = {}
     pop_by = defaultdict(int)
@@ -97,9 +107,14 @@ def estimate(manifest_rows: list[dict], final: dict[str, dict], r1: dict, r2: di
         lab = [i for i in items if i["stratum"] == s]
         k = sum(i["human_inadmissible"] for i in lab)
         n = len(lab)
-        per[s] = {"population_est": pop_by[s] * samp_by[s] if s != "admitted" else None,
-                  "sampled": samp_by[s], "labelled": n, "inadmissible": k,
-                  "ppv": (k / n) if n else None, "ppv_ci": list(wilson(k, n)) if n else None}
+        per[s] = {
+            "population_est": pop_by[s] * samp_by[s] if s != "admitted" else None,
+            "sampled": samp_by[s],
+            "labelled": n,
+            "inadmissible": k,
+            "ppv": (k / n) if n else None,
+            "ppv_ci": list(wilson(k, n)) if n else None,
+        }
 
     novel = [i for i in items if i["stratum"] in NOVEL]
     nk, nn = sum(i["human_inadmissible"] for i in novel), len(novel)
@@ -107,10 +122,22 @@ def estimate(manifest_rows: list[dict], final: dict[str, dict], r1: dict, r2: di
     ak, an = sum(i["human_inadmissible"] for i in adm), len(adm)
 
     weighted = {
-        "sensitivity": ht_rate(items, numerator=lambda i: i["gate_rejected"], denominator=lambda i: i["human_inadmissible"]),
-        "specificity": ht_rate(items, numerator=lambda i: not i["gate_rejected"], denominator=lambda i: not i["human_inadmissible"]),
-        "gate_reject_rate": ht_rate(items, numerator=lambda i: i["gate_rejected"], denominator=lambda i: True),
-        "human_inadmissible_rate": ht_rate(items, numerator=lambda i: i["human_inadmissible"], denominator=lambda i: True),
+        "sensitivity": ht_rate(
+            items,
+            numerator=lambda i: i["gate_rejected"],
+            denominator=lambda i: i["human_inadmissible"],
+        ),
+        "specificity": ht_rate(
+            items,
+            numerator=lambda i: not i["gate_rejected"],
+            denominator=lambda i: not i["human_inadmissible"],
+        ),
+        "gate_reject_rate": ht_rate(
+            items, numerator=lambda i: i["gate_rejected"], denominator=lambda i: True
+        ),
+        "human_inadmissible_rate": ht_rate(
+            items, numerator=lambda i: i["human_inadmissible"], denominator=lambda i: True
+        ),
     }
 
     ids = [m["anon_id"] for m in main if m["anon_id"] in r1 and m["anon_id"] in r2]
@@ -124,11 +151,25 @@ def estimate(manifest_rows: list[dict], final: dict[str, dict], r1: dict, r2: di
         "alpha_all3": krippendorff_alpha_nominal(units3) if r3 else None,
     }
     res = {
-        "n_main": len(main), "n_calibration": len(calib), "n_unresolved": n_unresolved, "n_indeterminate": n_indet,
+        "n_main": len(main),
+        "n_calibration": len(calib),
+        "n_unresolved": n_unresolved,
+        "n_indeterminate": n_indet,
         "per_stratum": per,
-        "novel_ppv": {"k": nk, "n": nn, "ppv": (nk / nn) if nn else None, "ci": list(wilson(nk, nn)) if nn else None},
-        "admitted_fn": {"k": ak, "n": an, "rate": (ak / an) if an else None, "ci": list(wilson(ak, an)) if an else None},
-        "weighted": weighted, "agreement": agreement,
+        "novel_ppv": {
+            "k": nk,
+            "n": nn,
+            "ppv": (nk / nn) if nn else None,
+            "ci": list(wilson(nk, nn)) if nn else None,
+        },
+        "admitted_fn": {
+            "k": ak,
+            "n": an,
+            "rate": (ak / an) if an else None,
+            "ci": list(wilson(ak, an)) if an else None,
+        },
+        "weighted": weighted,
+        "agreement": agreement,
     }
     go, reason = go_no_go(res)
     res["go"], res["go_reason"] = go, reason
@@ -139,31 +180,48 @@ def go_no_go(res: dict) -> tuple[bool, str]:
     ppv = res["novel_ppv"].get("ppv")
     fn = res["admitted_fn"].get("rate")
     if res.get("n_unresolved", 0):
-        return False, f"{res['n_unresolved']} unresolved disagreement(s); adjudicate before deciding"
+        return (
+            False,
+            f"{res['n_unresolved']} unresolved disagreement(s); adjudicate before deciding",
+        )
     if ppv is None or fn is None:
         return False, "missing labels for the novel stratum or the admitted cell"
     ok = ppv >= GO_PPV and fn < GO_FN
     verdict = "GO" if ok else "NO-GO"
-    return ok, f"{verdict}: novel PPV {ppv:.3f} {'>=' if ppv >= GO_PPV else '<'} {GO_PPV} and admitted FN {fn:.3f} {'<' if fn < GO_FN else '>='} {GO_FN}"
+    return (
+        ok,
+        f"{verdict}: novel PPV {ppv:.3f} {'>=' if ppv >= GO_PPV else '<'} {GO_PPV} and admitted FN {fn:.3f} {'<' if fn < GO_FN else '>='} {GO_FN}",
+    )
 
 
 def render_markdown(res: dict) -> str:
     def f(x, d=3):
         return "—" if x is None else f"{x:.{d}f}"
 
-    lines = ["# Study C′ results", "",
-             f"Main items {res['n_main']}, calibration {res['n_calibration']} (excluded), "
-             f"indeterminate {res['n_indeterminate']}, unresolved {res['n_unresolved']}.", "",
-             "| stratum | sampled | labelled | inadmissible | PPV | 95% CI |", "|---|---|---|---|---|---|"]
+    lines = [
+        "# Study C′ results",
+        "",
+        f"Main items {res['n_main']}, calibration {res['n_calibration']} (excluded), "
+        f"indeterminate {res['n_indeterminate']}, unresolved {res['n_unresolved']}.",
+        "",
+        "| stratum | sampled | labelled | inadmissible | PPV | 95% CI |",
+        "|---|---|---|---|---|---|",
+    ]
     for s, d in res["per_stratum"].items():
         ci = "—" if not d["ppv_ci"] else f"{d['ppv_ci'][0]:.2f}–{d['ppv_ci'][1]:.2f}"
-        lines.append(f"| {s} | {d['sampled']} | {d['labelled']} | {d['inadmissible']} | {f(d['ppv'])} | {ci} |")
+        lines.append(
+            f"| {s} | {d['sampled']} | {d['labelled']} | {d['inadmissible']} | {f(d['ppv'])} | {ci} |"
+        )
     w, ag = res["weighted"], res["agreement"]
-    lines += ["", f"Novel-stratum PPV {f(res['novel_ppv']['ppv'])} (k={res['novel_ppv']['k']}, n={res['novel_ppv']['n']}); "
-              f"admitted false-negative rate {f(res['admitted_fn']['rate'])} (k={res['admitted_fn']['k']}, n={res['admitted_fn']['n']}).",
-              f"Population-weighted sensitivity {f(w['sensitivity'])}, specificity {f(w['specificity'])}.",
-              f"Raw agreement {f(ag['raw'])}; Krippendorff α (r1,r2) {f(ag['alpha_r1_r2'])}; α (all three) {f(ag['alpha_all3'])}.",
-              "", f"**Go/no-go:** {res['go_reason']}"]
+    lines += [
+        "",
+        f"Novel-stratum PPV {f(res['novel_ppv']['ppv'])} (k={res['novel_ppv']['k']}, n={res['novel_ppv']['n']}); "
+        f"admitted false-negative rate {f(res['admitted_fn']['rate'])} (k={res['admitted_fn']['k']}, n={res['admitted_fn']['n']}).",
+        f"Population-weighted sensitivity {f(w['sensitivity'])}, specificity {f(w['specificity'])}.",
+        f"Raw agreement {f(ag['raw'])}; Krippendorff α (r1,r2) {f(ag['alpha_r1_r2'])}; α (all three) {f(ag['alpha_all3'])}.",
+        "",
+        f"**Go/no-go:** {res['go_reason']}",
+    ]
     return "\n".join(lines) + "\n"
 
 
@@ -173,7 +231,11 @@ def main() -> int:
     ap.add_argument("--r1", type=Path, required=True)
     ap.add_argument("--r2", type=Path, required=True)
     ap.add_argument("--r3", type=Path)
-    ap.add_argument("--structural", type=Path, help="3D-literate rater's labels for struct_* items; override r1/r2/r3 there")
+    ap.add_argument(
+        "--structural",
+        type=Path,
+        help="3D-literate rater's labels for struct_* items; override r1/r2/r3 there",
+    )
     args = ap.parse_args()
     manifest = list(csv.DictReader(open(args.dir / "manifest.csv", newline="")))
     r1, r2 = read_labels(args.r1), read_labels(args.r2)

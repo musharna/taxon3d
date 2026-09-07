@@ -127,6 +127,8 @@ def test_export_fails_loud_on_missing_sheet(tmp_path):
                 targets={s: 50 for s in cprime_strata.STRATA},
                 calibration_n=0,
             )
+
+
 # IRON_LAW_OK
 
 
@@ -155,6 +157,8 @@ def test_not_admitted_with_no_verdict_at_all_counts_as_unevaluated():
         pops, info = build_populations(db)
     assert all(out.id not in ids for ids in pops.values())
     assert info[-1]["excluded_unevaluated"] >= 1
+
+
 # IRON_LAW_OK
 
 
@@ -168,6 +172,8 @@ def test_empty_frame_is_refused_loudly():
         assert_frame_nonempty({s: [] for s in cprime_strata.STRATA})
     # positive control: a frame with any output at all passes
     assert_frame_nonempty({**{s: [] for s in cprime_strata.STRATA}, "admitted": [1]}) is None
+
+
 # IRON_LAW_OK
 
 

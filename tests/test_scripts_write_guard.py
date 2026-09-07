@@ -36,7 +36,10 @@ GUARDED = [
     ("scripts.run_dgen_ab", []),
     ("scripts.validate_completeness", []),
     ("scripts.seed_completeness_rubrics", []),
-    ("scripts.build_dataset_release", ["--version", "v1", "--tasks", "t", "--generators", "g", "--out", "{tmp}"]),
+    (
+        "scripts.build_dataset_release",
+        ["--version", "v1", "--tasks", "t", "--generators", "g", "--out", "{tmp}"],
+    ),
 ]
 
 
@@ -61,7 +64,9 @@ def test_bare_run_exits_2_before_any_session(modname, argv, monkeypatch, tmp_pat
     monkeypatch.setattr(mod, "SessionLocal", _trip, raising=False)
     monkeypatch.setattr(mod, "init_db", _trip, raising=False)
     monkeypatch.setattr(mod, "import_bundle", _trip, raising=False)
-    monkeypatch.setattr(mod, "get_storage", lambda: types.SimpleNamespace(remote=True), raising=False)
+    monkeypatch.setattr(
+        mod, "get_storage", lambda: types.SimpleNamespace(remote=True), raising=False
+    )
     monkeypatch.setattr(config, "DATABASE_URL", "sqlite:////tmp/nowhere.db")
     monkeypatch.setattr("sys.argv", [modname] + _argv(argv, tmp_path, bundle))
     with pytest.raises(SystemExit) as e:
@@ -86,13 +91,21 @@ def test_reseed_gold_apply_reaches_the_seeder_with_the_given_ids(monkeypatch):
     seen = []
     monkeypatch.setattr(config, "DATABASE_URL", "sqlite:////tmp/nowhere.db")
     monkeypatch.setattr(rg, "SessionLocal", lambda: contextlib.nullcontext(object()))
-    monkeypatch.setattr(rg, "reseed_gold", lambda db, ids, recut=False: seen.append((ids, recut)) or {"created": 0, "skipped": 0, "detail": []})
+    monkeypatch.setattr(
+        rg,
+        "reseed_gold",
+        lambda db, ids, recut=False: (
+            seen.append((ids, recut)) or {"created": 0, "skipped": 0, "detail": []}
+        ),
+    )
     monkeypatch.setattr("sys.argv", ["reseed_gold", "--task-ids", "4,7", "--recut", "--apply"])
     assert rg.main() == 0
     assert seen == [([4, 7], True)]
 
 
-def test_import_public_bare_run_prints_the_plan_and_imports_nothing(monkeypatch, tmp_path, bundle, capsys):
+def test_import_public_bare_run_prints_the_plan_and_imports_nothing(
+    monkeypatch, tmp_path, bundle, capsys
+):
     from scripts import import_public
 
     monkeypatch.setattr(import_public, "import_bundle", _trip)

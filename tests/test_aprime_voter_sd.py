@@ -52,6 +52,8 @@ def test_refuses_when_no_voter_has_enough_ballots():
     y = np.array([1.0, 0.0, 1.0, 0.0])
     with pytest.raises(ValueError, match="no voter"):
         estimate_sd_voter(v, p, y, min_ballots=10)
+
+
 # IRON_LAW_OK
 
 

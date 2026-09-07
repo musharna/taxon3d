@@ -25,13 +25,19 @@ def _csv(path: Path, rows: list[dict]) -> Path:
 
 
 def test_read_labels_rejects_bad_code(tmp_path):
-    p = _csv(tmp_path / "l.csv", [{"anon_id": "c001", "taxon": "x", "sheet_file": "c001.png", "label": "okay", "note": ""}])
+    p = _csv(
+        tmp_path / "l.csv",
+        [{"anon_id": "c001", "taxon": "x", "sheet_file": "c001.png", "label": "okay", "note": ""}],
+    )
     with pytest.raises(ValueError, match="c001"):
         read_labels(p)
 
 
 def test_read_labels_rejects_empty(tmp_path):
-    p = _csv(tmp_path / "l.csv", [{"anon_id": "c002", "taxon": "x", "sheet_file": "c002.png", "label": "", "note": ""}])
+    p = _csv(
+        tmp_path / "l.csv",
+        [{"anon_id": "c002", "taxon": "x", "sheet_file": "c002.png", "label": "", "note": ""}],
+    )
     with pytest.raises(ValueError, match="c002"):
         read_labels(p)
 
@@ -55,20 +61,41 @@ def test_human_inadmissible_mapping():
 def _manifest():
     rows = []
     for i in range(10):  # novel_multiple: pop 20, sampled 10
-        rows.append({"anon_id": f"c{i+1:03d}", "stratum": "novel_multiple", "inclusion_prob": "0.5", "set": "main"})
+        rows.append(
+            {
+                "anon_id": f"c{i + 1:03d}",
+                "stratum": "novel_multiple",
+                "inclusion_prob": "0.5",
+                "set": "main",
+            }
+        )
     for i in range(10, 20):  # admitted: pop 100, sampled 10
-        rows.append({"anon_id": f"c{i+1:03d}", "stratum": "admitted", "inclusion_prob": "0.1", "set": "main"})
-    rows.append({"anon_id": "c999", "stratum": "admitted", "inclusion_prob": "0.000000", "set": "calibration"})
+        rows.append(
+            {
+                "anon_id": f"c{i + 1:03d}",
+                "stratum": "admitted",
+                "inclusion_prob": "0.1",
+                "set": "main",
+            }
+        )
+    rows.append(
+        {
+            "anon_id": "c999",
+            "stratum": "admitted",
+            "inclusion_prob": "0.000000",
+            "set": "calibration",
+        }
+    )
     return rows
 
 
 def test_estimate_ppv_fn_and_weighted_rates():
     man = _manifest()
     # raters agree everywhere: 9 of 10 novel are inadmissible, 1 ok; admitted: 1 of 10 inadmissible, 1 indeterminate
-    labels = {f"c{i+1:03d}": "multiple" for i in range(9)}
+    labels = {f"c{i + 1:03d}": "multiple" for i in range(9)}
     labels["c010"] = "ok"
     for i in range(10, 20):
-        labels[f"c{i+1:03d}"] = "ok"
+        labels[f"c{i + 1:03d}"] = "ok"
     labels["c011"] = "sub_part"
     labels["c012"] = "indeterminate"
     final = adjudicate(labels, labels, None)
@@ -76,7 +103,9 @@ def test_estimate_ppv_fn_and_weighted_rates():
     assert res["n_main"] == 20 and res["n_calibration"] == 1
     assert res["per_stratum"]["novel_multiple"]["ppv"] == pytest.approx(0.9)
     assert res["novel_ppv"]["k"] == 9 and res["novel_ppv"]["n"] == 10
-    assert res["admitted_fn"] == pytest.approx({"k": 1, "n": 9, "rate": 1 / 9, "ci": res["admitted_fn"]["ci"]})
+    assert res["admitted_fn"] == pytest.approx(
+        {"k": 1, "n": 9, "rate": 1 / 9, "ci": res["admitted_fn"]["ci"]}
+    )
     assert res["n_indeterminate"] == 1
     # weighted sensitivity: human-inadmissible = 9 novel (w=2) + 1 admitted (w=10). gate rejected the 9 novel.
     assert res["weighted"]["sensitivity"] == pytest.approx(18 / 28)

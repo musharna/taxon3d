@@ -15,7 +15,9 @@ def test_soybean_spotlight_registered():
     spot = find_spotlight("soybean")
     assert spot is not None
     assert spot["task_title"] == SOYBEAN_SUBJECT_TITLE
-    assert spot["reference_image"] == "reference/soybean_ref_clean.jpg"  # the CC photo, not the private one
+    assert (
+        spot["reference_image"] == "reference/soybean_ref_clean.jpg"
+    )  # the CC photo, not the private one
 
 
 def test_icrisat_legume_scan_registry():
