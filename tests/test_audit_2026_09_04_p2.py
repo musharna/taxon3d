@@ -24,7 +24,9 @@ def setup_module(_m):
 def test_admin_token_compare_is_constant_time(monkeypatch):
     import hmac
 
-    from app import main as main_mod
+    # `_require_admin` (and the `hmac` it calls) live in app.routes.admin; app.main only re-exports
+    # the function, and has no `hmac` of its own to patch.
+    from app.routes import admin as main_mod
 
     seen = []
     real = hmac.compare_digest

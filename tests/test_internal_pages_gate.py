@@ -13,13 +13,28 @@ from app import config
 from app.main import app
 
 
+def all_routes(routes=None) -> list:
+    """The route table FLATTENED. FastAPI (0.138) keeps an `include_router` as a single lazy
+    `_IncludedRouter` entry in `app.routes`, so walking it directly sees none of the routes that
+    live in app/routes/*.py — the gated JSON APIs among them — and the derivation below would
+    silently shrink to the routes still declared in app.main."""
+    out = []
+    for route in app.routes if routes is None else routes:
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            out.extend(all_routes(inner.routes))
+        else:
+            out.append(route)
+    return out
+
+
 def internal_gated_paths() -> set[str]:
     """Every route path that declares `require_internal_pages` — read off the live app, so a
     newly gated (or un-gated) route is tested without anyone editing a list here."""
     from app.main import require_internal_pages
 
     found: set[str] = set()
-    for route in app.routes:
+    for route in all_routes():
         dependant = getattr(route, "dependant", None)
         if dependant is None:
             continue
@@ -33,7 +48,7 @@ def internal_gated_paths() -> set[str]:
 # dependency ever runs, so it could never show the 404 this file asserts.
 _GATED_GET = {
     r.path
-    for r in app.routes
+    for r in all_routes()
     if r.path in internal_gated_paths()
     and "GET" in (getattr(r, "methods", None) or ())
     and "{" not in r.path

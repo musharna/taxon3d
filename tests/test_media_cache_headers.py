@@ -28,8 +28,11 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
-from app import main as app_main
 from app.database import SessionLocal
+
+# The /media/o routes live in app.routes.vote and bind `storage` at import, so the backend has to
+# be swapped on THAT module — patching app.main.storage would leave the handlers on the real one.
+from app.routes import vote as app_main
 from app.main import app
 from app.models import ModelOutput
 from app.seed import seed_all
