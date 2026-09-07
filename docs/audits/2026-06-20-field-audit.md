@@ -1,5 +1,12 @@
 # Taxon3D — Field Audit (2026-06-20)
 
+> **TRIAGED AND CLOSED 2026-09-06.** This audit predates the pivot from a general bio-3D arena
+> (molecules, organs, docking) to Taxon3D, an arena for whole organisms judged against reference
+> photographs. Section C (bio-3D benchmark content) and every molecular item are **out of scope**
+> since that pivot, not open. Items that were built without this file being updated are marked
+> `[x] built …` below. What remains open is carried in the 2026-09-06 repo audit (project memory,
+> `repo_audit_finalization_2026-09-06.md`); nothing here is a live queue.
+
 **Trigger:** User asked, after the submission/moderation queue shipped — "audit the field: what do
 similar websites have that we lack? what improvements are we missing? how does our stuff look
 visually? are we missing any bio benchmarks?"
@@ -47,7 +54,7 @@ screenshots + verify 3D viewer runtime before the visual fixes are called done.
       into A-win + B-win. **Verify ties aren't silently dropped today.** _Low._
 - [ ] **[MED] Per-category / per-dimension leaderboards from one vote stream** (per molecule class:
       protein / nucleic-acid / complex / small-molecule, and per prompt-type). _Med._
-- [ ] **[MED] Multi-dimensional voting** — separate Elos per criterion (structural correctness vs
+- [x] **[MED] Multi-dimensional voting** — _built: criteria `overall` + `botanical_plausibility` (`/arena` Judge-on selector)_ · — separate Elos per criterion (structural correctness vs
       visual quality vs prompt-organism alignment). 3DGen-Arena votes 5 dimensions. Largely unexploited
       in bio. _Med._
 - [ ] **[MED] Style/representation control in the BT regression** — regress out representation
@@ -88,7 +95,7 @@ screenshots + verify 3D viewer runtime before the visual fixes are called done.
 
 ### B4. Transparency
 
-- [ ] **[HIGH] Public anonymized vote-data release + reproducible notebook** that recomputes the
+- [x] **[HIGH] Public anonymized vote-data release + reproducible notebook** — _built: HF `musharna/taxon3d-corpus-v1` with `preferences.jsonl`; reproduction script tracked separately (2026-09-06)_ · that recomputes the
       leaderboard from the dump (LMArena/GenAI-Arena/imgsys/3D Arena all do this; AA's lack is its trust
       gap). _Low — periodic CSV/Parquet export + a Colab/notebook._
 - [x] **Dedicated methodology page** — ALREADY HAVE (/methodology). Strong; could add a pipeline
@@ -97,9 +104,9 @@ screenshots + verify 3D viewer runtime before the visual fixes are called done.
 
 ### B5. Community & API
 
-- [ ] **[MED] Read API / JSON data endpoint** for leaderboard + rankings (LLM-Stats differentiator).
+- [x] **[MED] Read API / JSON data endpoint** — _built: `/api/leaderboard`, `/api/export.json`, `/openapi.json`_ · for leaderboard + rankings (LLM-Stats differentiator).
       _Low — one FastAPI route._
-- [ ] **[MED] Model metadata cards** — provider, license, release date, modality/format (GLB vs
+- [x] **[MED] Model metadata cards** — _built: `/models/<slug>` (`model_detail.html`) with licence + provenance_ · — provider, license, release date, modality/format (GLB vs
       PDB/mmCIF), generation cost/GPU-seconds, params. _Low-med — schema fields + detail page._
 - [ ] **[MED] Head-to-head compare tool (pick 2–N models)** — direct Elo/CI/win-rate comparison.
       _Low-med._
@@ -110,7 +117,7 @@ screenshots + verify 3D viewer runtime before the visual fixes are called done.
 - [ ] **[HIGH] Embeddable "#N on Taxon3D" badge + iframe rank widget** — absent on EVERY
       platform surveyed. Wide-open differentiation + viral distribution lever. _Low — dynamic SVG/PNG
       badge endpoint + iframe-able mini-leaderboard._
-- [ ] **[MED] OpenGraph / social cards** for leaderboard + per-model pages. _Low._
+- [x] **[MED] OpenGraph / social cards** — _built: og:* on every page (`base.html`), organism pages_ · for leaderboard + per-model pages. _Low._
 - [ ] **[LOW] Per-session voter stats / vote streak.** _Low._
 - [ ] **[LOW] Rank-over-time trend chart per model** (needs dated snapshots). _Low-med._
 
@@ -119,16 +126,18 @@ screenshots + verify 3D viewer runtime before the visual fixes are called done.
 - [ ] **[MED] Anomalous-voter statistical detection** — binomial test of each user's votes vs
       community consensus (3D Arena flags at p<1e-5), or Fisher-combination + Bonferroni over a user's
       sequential p-values (LMArena, ~90% TPR). Complements our gold checks. _Med — batch job._
-- [ ] **[MED] reCAPTCHA v3 + per-IP vote caps + prompt/vote dedup** (LMArena's actual stack). We
+- [x] **[MED] reCAPTCHA v3 + per-IP vote caps + prompt/vote dedup** — _built: Turnstile (`app/integrity.py`), per-IP + per-session limits, dedup_ · (LMArena's actual stack). We
       have rate limiting + a captcha _seam_; add real CAPTCHA + dedup hash on prompt+pair. _Low-med._
 - [ ] **[MED] Model self-identification leakage defense** (arXiv 2501.17858) — strip identifying
       metadata from served 3D files; add same-org / position-bias covariates to the BT regression.
       _Med._
-- [ ] **[LOW] OAuth one-verified-ID-per-vote lane** (3D Arena uses HF OAuth). _Low-med._
+- [x] **[LOW] OAuth one-verified-ID-per-vote lane** — _built: HF OAuth (`app/auth.py`)_ · (3D Arena uses HF OAuth). _Low-med._
 
 ---
 
 ## C. Bio-3D benchmark gaps (tasks + representations we're missing)
+
+> **OUT OF SCOPE since the Taxon3D pivot (organisms vs reference photos).** Left as written for the record; none of these is open.
 
 We currently seed only demo tasks with procedural assets across 5 mesh categories + proteins, and
 render only **GLB/GLTF (mesh)** and **PDB/mmCIF (molecular)**.
@@ -206,7 +215,7 @@ the core product — ship with ZERO affordances. ~1 focused day on viewer afford
 - [~] **[HIGH] No reset-camera / fullscreen control** — DEFERRED (YAGNI): `<model-viewer>` already has
   camera-controls + 3Dmol drag; per-viewer fullscreen APIs differ and add complexity for low value.
   Revisit if users report the 360px frame is too small.
-- [ ] **[HIGH] model-viewer missing `alt` / `poster` / `loading`** (accessibility + perceived load).
+- [x] **[HIGH] model-viewer missing `alt` / `poster` / `loading`** — _built: `loading`, `reveal=manual`, `aria-label` (`viewer.js`); poster deliberately absent (a partial mesh is indistinguishable from a degenerate one)_ · (accessibility + perceived load).
 - [ ] **[MED] Molecular bg `0x131a24` (flat) mismatches slot radial gradient** — the two columns
       won't look like peers. Make both transparent or both flat.
 - [ ] **[MED] Molecular representation locked** (stick+sphere+cartoon) — add a representation
@@ -217,11 +226,11 @@ the core product — ship with ZERO affordances. ~1 focused day on viewer afford
 - [ ] **[HIGH] Vote bar visually flat** — 4 buttons share `--panel2`, differentiated only by a 1px
       border (nearly invisible on dark). The app's primary action has almost no visual weight. Fill the
       A/B win buttons with accent; make Tie/Both-bad clearly secondary; reduce emoji.
-- [ ] **[HIGH] Keyboard shortcuts undocumented** — bind exists (arena.js:117) but UI never shows it;
+- [x] **[HIGH] Keyboard shortcuts undocumented** — _built: `<kbd>` badges on the vote bar and a keys legend (`arena.html`)_ · — bind exists (arena.js:117) but UI never shows it;
       add `<kbd>` badges + a legend.
 - [ ] **[MED] No per-button vote-registered feedback** before next pair loads (only a 700ms status
       flash). Highlight the chosen button.
-- [ ] **[MED] `.viewer-slot` fixed 360px doesn't shrink on mobile** — stacked viewers push vote
+- [x] **[MED] `.viewer-slot` fixed 360px doesn't shrink on mobile** — _built: responsive slots + sticky vote bar (`style.css`, `scripts/mobile_audit.py`)_ · — stacked viewers push vote
       buttons below the fold. Use `clamp(220px,45vh,360px)`; consider a sticky vote bar.
 - [ ] **[MED] Initial load shows literal `…` placeholder** — add skeleton shimmer.
 
@@ -254,12 +263,12 @@ the core product — ship with ZERO affordances. ~1 focused day on viewer afford
 - [~] **[HIGH] "MVP" stamped in every footer** — footer "· MVP" DROPPED (Inc3 @c8f1294). Remaining:
   admin-page "Upload Model Output" headings unchanged (operator-facing, lower priority).
 - [x] **[MED] No `prefers-reduced-motion` block** — DONE (Inc3 @c8f1294): added alongside the spinner.
-- [ ] **[MED] Status updates not announced** — add `aria-live="polite"` to `#status-line` /
+- [x] **[MED] Status updates not announced** — _built 2026-09-06: `role=status aria-live=polite` on `#status-line`_ · — add `aria-live="polite"` to `#status-line` /
       `#submit-status`.
-- [ ] **[MED] 3D viewers fully inaccessible to screen readers** — add `aria-label`.
+- [x] **[MED] 3D viewers fully inaccessible to screen readers** — _built: `aria-label` on every `<model-viewer>` (`viewer.js`)_ · — add `aria-label`.
 - [ ] **[MED] No active-nav indication / no responsive nav** — 7-item nav wraps on phones; add
       `aria-current` style + a collapse under ~600px.
-- [ ] **[MED] Raw exception strings dumped into UI** (`"Error: " + err`) — friendly error component
+- [x] **[MED] Raw exception strings dumped into UI** — _built: vote/pick/flag failures render server `detail`, not `err`_ · (`"Error: " + err`) — friendly error component
   - retry; log raw to console only.
 - [ ] **[LOW] CDN scripts (googleapis + jsdelivr) lack SRI/fallback** — viewers break silently if a
       CDN is blocked. Add `integrity`/`crossorigin` + fallback check.
