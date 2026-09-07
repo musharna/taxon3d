@@ -70,3 +70,13 @@ def test_significance_matrix_has_colorblind_legend():
     assert '<table class="matrix">' in html, "matrix did not render — not enough votes"
     assert "matrix-legend" in html  # legend block rendered
     assert "row clearly ahead" in html  # legend explains the scale in words
+
+
+def test_vote_status_line_is_announced_to_screen_readers():
+    """`#status-line` is where "Vote recorded" / "pick not recorded" / rate-limit notices land
+    (arena.js setStatus/flash). Sighted voters see it change; a screen reader only hears a live
+    region. Field audit 2026-06-20 item :257."""
+    html = client.get("/arena").text
+    line = html.split('id="status-line"')[1].split(">")[0]
+    assert 'aria-live="polite"' in line, line
+    assert 'role="status"' in line, line
