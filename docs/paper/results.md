@@ -1,5 +1,13 @@
 # Results (SP4 paper — draft): geometry is not enough
 
+> [!WARNING]
+> **SUPERSEDED 2026-09-06.** This July draft argues a different headline ("a third of trait
+> judgments cannot be made") from the one the paper now preregisters. The claim under test is
+> fixed in `docs/paper/2026-09-05-evidence-plan-design.md` and `docs/paper/prereg-cprime.md`
+> (biological admissibility as a fail-closed pre-vote gate; criterion crossover on mixed pairs).
+> Nothing below may be promoted to a headline after the fact; it is kept as background analysis
+> and as a record of what was believed before the panel audit of 2026-09-05.
+
 > Draft results section for the P-A paper, computed 2026-07-01 on the internal study data
 > (`data/study/arena-study.db` + the human trait-calibration labels). Numbers are reproducible via
 > `scripts/`-style analysis over 397 human trait-labelings, 175 Chamfer-scored outputs, 138 votes.
