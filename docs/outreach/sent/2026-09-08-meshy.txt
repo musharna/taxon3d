@@ -1,10 +1,11 @@
-Send twice: paste into the partnerships form at https://www.meshy.ai/contact (choose the
-partnerships / press option if the form offers one), AND email it to support@meshy.ai with the
-subject line below asking them to forward it to whoever handles partnerships or PR.
+Send two ways: email to support@meshy.ai with the subject below, and a short version posted
+in the Meshy Discord (link on meshy.ai/about). The meshy.ai/contact form is sales-only; skip it.
 
 Subject: Meshy 6 ranks first on both boards of Taxon3D, a blind human-vote benchmark for 3D models of organisms
 
 Hi Meshy team,
+
+Could you forward this to your marketing or partnerships team? It is an independent benchmark result, not a support question.
 
 I run Taxon3D (taxon3d.org), a blind pairwise arena that ranks 3D generative models on living organisms: maize, rose, lion's mane, goldfish, monarch and others, always with reference photographs of the real organism beside the pair. Rankings are Bradley-Terry with bootstrap confidence intervals, and voters never see which model made what.
 

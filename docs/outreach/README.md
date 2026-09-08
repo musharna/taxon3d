@@ -40,4 +40,4 @@ and the admissibility gate, not "plants".
 | 2026-09-07 | Awesome-Text-to-3D PR #150 | — | open, awaiting maintainer |
 | 2026-09-07 | Tripo / VAST email to support@tripo3d.ai (`sent/2026-09-07-tripo.txt`) | `team-tripo` | sent; one team at a time, next is Meshy after a few days |
 | 2026-09-08 | Tripo support replied (ticket #20260908000136): "reach out to business@tripo3d.ai". Follow-up drafted (`sent/2026-09-08-tripo-business.txt`) | `team-tripo` | sent 2026-09-08 |
-| 2026-09-08 | Meshy: partnerships form + support@meshy.ai (`sent/2026-09-08-meshy.txt`) | `team-meshy` | awaiting send |
+| 2026-09-08 | Meshy: support@meshy.ai (forward request) + Discord; contact form is sales-only, skipped (`sent/2026-09-08-meshy.txt`) | `team-meshy` | awaiting send |
