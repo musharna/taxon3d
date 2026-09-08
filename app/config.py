@@ -446,7 +446,14 @@ APP_HIDDEN_PARADIGMS = frozenset({"retrieval", "procedural_expert", "capture_sca
 # paradigms come from disconnected match pools and are not comparable.
 #
 # Empty frozenset = unscoped (every paradigm votable). Widen this as vote volume grows.
-ARENA_VOTE_PARADIGMS = frozenset({"image_recon", "text_native"})
+#
+# WIDENED 2026-09-07 to the four public paradigms. The two-paradigm cut above held from 07-28 and
+# starved the LLM boards completely: 0 comparisons served to procedural_llm/agentic in six weeks,
+# both paid waves (1,137 votes) landed on image/text, and the 08-26 internal-cohort exclusion then
+# removed the only votes those boards had — so the public page showed 33 rows at "30 more votes →
+# firm" that the matchmaker could never deliver. A traffic push is the volume growth the cut was
+# waiting for, and "LLMs writing plant geometry in code" is the push's hook.
+ARENA_VOTE_PARADIGMS = frozenset({"image_recon", "text_native", "procedural_llm", "agentic"})
 
 
 def is_safe_test_db_target(value: str | None) -> bool:

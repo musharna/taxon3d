@@ -51,8 +51,13 @@ def _gen(db, paradigm):
 # --- the roster itself ---------------------------------------------------------------
 
 
-def test_the_vote_roster_is_the_two_commercial_model_paradigms():
-    assert config.ARENA_VOTE_PARADIGMS == frozenset({"image_recon", "text_native"})
+def test_the_vote_roster_is_all_four_public_paradigms():
+    """Widened 2026-09-07 for the engagement push. The July cut to two paradigms left the LLM
+    boards shown-but-unvotable for six weeks (0 comparisons served, '30 more votes → firm' on
+    every row); a traffic push IS the volume growth the cut was waiting for."""
+    assert config.ARENA_VOTE_PARADIGMS == frozenset(
+        {"image_recon", "text_native", "procedural_llm", "agentic"}
+    )
 
 
 def test_the_roster_does_not_overlap_the_app_hidden_paradigms():
@@ -63,8 +68,17 @@ def test_the_roster_does_not_overlap_the_app_hidden_paradigms():
 
 # --- the exclusion set ---------------------------------------------------------------
 
+NARROW = frozenset({"image_recon", "text_native"})  # the 07-28..09-07 roster
 
-def test_off_roster_paradigms_are_excluded_from_the_vote_pool():
+
+@pytest.fixture
+def narrow_roster(monkeypatch):
+    """The live roster now holds all four public paradigms, so the exclusion mechanism is
+    exercised against the historical two-paradigm roster; the LLM paradigms play off-roster."""
+    monkeypatch.setattr(config, "ARENA_VOTE_PARADIGMS", NARROW)
+
+
+def test_off_roster_paradigms_are_excluded_from_the_vote_pool(narrow_roster):
     with SessionLocal() as db:
         keep = _gen(db, "image_recon")
         keep2 = _gen(db, "text_native")
@@ -100,7 +114,7 @@ def test_an_empty_roster_scopes_nothing(monkeypatch):
 # --- scoped OUT of voting, but NOT hidden -------------------------------------------
 
 
-def test_off_roster_paradigms_stay_visible_on_the_boards():
+def test_off_roster_paradigms_stay_visible_on_the_boards(narrow_roster):
     """The whole point of a separate axis. If these landed in app_hidden_generator_ids they
     would vanish from /leaderboard, /models and the judge boards too — which is the thing this
     change is explicitly NOT doing."""
@@ -145,7 +159,7 @@ def _task_with(db, *generators):
     return t
 
 
-def test_pick_pair_serves_the_roster_and_not_the_rest():
+def test_pick_pair_serves_the_roster_and_not_the_rest(narrow_roster):
     from app.main import _vote_pool_predicate
 
     with SessionLocal() as db:
@@ -160,7 +174,7 @@ def test_pick_pair_serves_the_roster_and_not_the_rest():
         db.rollback()
 
 
-def test_a_task_with_only_off_roster_outputs_yields_no_pair():
+def test_a_task_with_only_off_roster_outputs_yields_no_pair(narrow_roster):
     from app.main import _vote_pool_predicate
 
     with SessionLocal() as db:
@@ -170,7 +184,7 @@ def test_a_task_with_only_off_roster_outputs_yields_no_pair():
         db.rollback()
 
 
-def test_the_same_task_IS_pairable_once_the_roster_is_opened(monkeypatch):
+def test_the_same_task_IS_pairable_once_the_roster_is_opened(narrow_roster, monkeypatch):
     """Positive control for the test above: proves the None came from the roster scope and not
     from some unrelated reason the fixture happens to trip (unpairable task, gated output).
     Same task, same predicate factory, only the allowlist differs."""

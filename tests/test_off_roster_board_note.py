@@ -24,6 +24,13 @@ def client():
     return TestClient(app)
 
 
+@pytest.fixture
+def narrow_roster(monkeypatch):
+    """The live roster holds all four public paradigms since 2026-09-07; the note's mechanism is
+    exercised against the historical two-paradigm roster so it still fires for something."""
+    monkeypatch.setattr(config, "ARENA_VOTE_PARADIGMS", frozenset({"image_recon", "text_native"}))
+
+
 def _board(client, paradigm):
     """One modality's board. The query param is `paradigm=` — `modality=` is the JUDGE board's
     param, and passing it here silently renders the cross-modality HUB instead, which carries
@@ -34,19 +41,19 @@ def _board(client, paradigm):
     return r.text
 
 
-def test_an_off_roster_board_explains_that_human_voting_is_scoped(client):
+def test_an_off_roster_board_explains_that_human_voting_is_scoped(client, narrow_roster):
     html = _board(client, "procedural_llm")
     assert "off-roster-note" in html, "off-roster board carries no explanation"
 
 
-def test_an_on_roster_board_carries_no_such_note(client):
+def test_an_on_roster_board_carries_no_such_note(client, narrow_roster):
     """Positive control. Without it, a note rendered unconditionally would satisfy the test
     above while telling every reader their board is paused."""
     html = _board(client, "image_recon")
     assert "off-roster-note" not in html
 
 
-def test_the_note_points_at_the_judge_board(client):
+def test_the_note_points_at_the_judge_board(client, narrow_roster):
     """The useful half of the message: these models ARE still ranked, just not by humans."""
     html = _board(client, "agentic")
     assert "off-roster-note" in html
@@ -58,3 +65,9 @@ def test_no_board_is_off_roster_when_the_roster_is_open(client, monkeypatch):
     it is keyed off the live config, not hard-coded to two paradigm names."""
     monkeypatch.setattr(config, "ARENA_VOTE_PARADIGMS", frozenset())
     assert "off-roster-note" not in _board(client, "procedural_llm")
+
+
+def test_no_board_is_off_roster_on_the_live_roster(client):
+    """The live roster is all four public paradigms (2026-09-07), so no board is paused."""
+    assert "off-roster-note" not in _board(client, "procedural_llm")
+    assert "off-roster-note" not in _board(client, "agentic")
