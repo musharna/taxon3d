@@ -1,0 +1,26 @@
+Send twice: paste into the partnerships form at https://www.meshy.ai/contact (choose the
+partnerships / press option if the form offers one), AND email it to support@meshy.ai with the
+subject line below asking them to forward it to whoever handles partnerships or PR.
+
+Subject: Meshy 6 ranks first on both boards of Taxon3D, a blind human-vote benchmark for 3D models of organisms
+
+Hi Meshy team,
+
+I run Taxon3D (taxon3d.org), a blind pairwise arena that ranks 3D generative models on living organisms: maize, rose, lion's mane, goldfish, monarch and others, always with reference photographs of the real organism beside the pair. Rankings are Bradley-Terry with bootstrap confidence intervals, and voters never see which model made what.
+
+Meshy is the only vendor at the top of both boards:
+- Image-to-3D: Meshy 6 is rank 1 of 12 with the highest score on the board (BT 1146, 95% CI 1092-1216, 117 games), sharing the top group only with TRELLIS 2.
+- Text-to-3D: Meshy v6 text is rank 1 of 7 (BT 1086, 95% CI 1044-1125, 205 games), in the top group with Tripo H3.1 and P1.
+
+Model pages with head-to-head records against every opponent:
+https://taxon3d.org/models/fal:meshy-v6?c=team-meshy
+https://taxon3d.org/models/fal:meshy-v6-text?c=team-meshy
+
+Why this might be useful to you:
+- It is an independent, public result you are free to cite or share. Every leaderboard vote is public with generators revealed, on Hugging Face as musharna/taxon3d-corpus-v1, and the code is MIT at github.com/musharna/taxon3d.
+- The record is broken down per organism, with the input photo or prompt for each, so your team can see exactly where the model wins and where it struggles.
+- When a newer model ships I will run it on the same tasks at no cost to you. Submissions are at taxon3d.org/submit.
+
+If you share the result, a link back is what keeps the site findable. Happy to answer any question about the protocol.
+
+Jaret Arnold
