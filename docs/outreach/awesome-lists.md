@@ -3,7 +3,7 @@
 Sort candidate lists by last push, never by stars: the 1,198-star list was last pushed in 2023
 and will not merge anything. Already merged: wendashi/awesome-3D-Generative-Models (2026-08-15).
 
-## yyeboah/Awesome-Text-to-3D (600 stars, pushed 2026-09-07) — SUBMIT
+## yyeboah/Awesome-Text-to-3D (600 stars, pushed 2026-09-07) — SUBMITTED: PR #150, 2026-09-07
 
 Section: `## Frameworks & Projects :desktop_computer:`. Entry format there is
 `- [Title](url), Author, Venue Year | [code](repo)`. Proposed line, inserted at the top of the
