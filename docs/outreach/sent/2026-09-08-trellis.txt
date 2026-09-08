@@ -1,0 +1,20 @@
+To: jiaoyan [at] microsoft.com
+Cc: t-jxiang [at] microsoft.com
+Subject: TRELLIS 2 on Taxon3D, a blind human-vote benchmark for 3D models of organisms
+
+Hi Dr. Yang,
+
+I run Taxon3D (taxon3d.org), a blind pairwise arena that ranks 3D generative models on living organisms: maize, rose, lion's mane, goldfish, monarch and others, always with reference photographs of the real organism beside the pair. Rankings are Bradley-Terry with bootstrap confidence intervals.
+
+TRELLIS 2 is on the image-to-3D board at rank 1 of 12, tied with Meshy 6 within the interval (BT 1067, 95% CI 995-1137, 51 games). The original TRELLIS, run through Replicate and through fal, sits in the rank-4 group. The page with the head-to-head record against every opponent is here:
+https://taxon3d.org/models/replicate:trellis2?c=team-trellis
+
+Two things you might find useful:
+- The record is broken down per task, so the organisms TRELLIS handles well and the ones it struggles with are visible, with the input photo for each. Thin structures and self-occluding foliage are where most models on the board lose.
+- If a newer checkpoint exists I will run it on the same tasks. Submissions are at taxon3d.org/submit.
+
+Every leaderboard vote is public with generators revealed, on Hugging Face as musharna/taxon3d-corpus-v1, and the code is MIT at github.com/musharna/taxon3d.
+
+If you share the result, a link back is what keeps the site findable. Happy to answer any question about the protocol.
+
+Jaret Arnold
