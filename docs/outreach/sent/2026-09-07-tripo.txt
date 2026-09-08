@@ -1,0 +1,19 @@
+To: support@tripo3d.ai
+Subject: For the research team: Tripo H3.1 and P1 on Taxon3D, a blind human-vote benchmark for 3D models of organisms
+
+Hi VAST team,
+
+Could you pass this to whoever works on Tripo's generation models? I run Taxon3D (taxon3d.org), a blind pairwise arena that ranks 3D generative models on living organisms: maize, rose, lion's mane, goldfish, monarch and others, always with reference photographs of the real organism beside the pair. Rankings are Bradley-Terry with bootstrap confidence intervals.
+
+On the text-to-3D board, Tripo H3.1 and Tripo P1 are both in the rank-1 group of 7 models, alongside Meshy v6, with the intervals overlapping (H3.1: BT 1064, 95% CI 1024-1095, 230 games; P1: BT 1038, 95% CI 1010-1082, 205 games). Head-to-head records against every opponent are on the model page:
+https://taxon3d.org/models/fal:tripo-h31-text?c=team-tripo
+
+Two things you might find useful:
+- The record is broken down per organism, with the prompt for each, so the taxa each model handles well and the ones it struggles with are visible.
+- If a newer model exists I will run it on the same tasks. Submissions are at taxon3d.org/submit. TripoSR is on the image-to-3D board too, but with only 28 games its interval is too wide to say much yet.
+
+Every leaderboard vote is public with generators revealed, on Hugging Face as musharna/taxon3d-corpus-v1, and the code is MIT at github.com/musharna/taxon3d.
+
+If you share the result, a link back is what keeps the site findable. Happy to answer any question about the protocol.
+
+Jaret Arnold

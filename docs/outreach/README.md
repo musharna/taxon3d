@@ -32,3 +32,11 @@ Copy rules used throughout: measured numbers only (1,461 votes, 52 entrants, 488
 20 tasks across plants, fungi and animals, 4 boards); no "first"/"only" claims — 3DGen-Bench has
 a Plant category and 3D Arena is the bigger generic arena. The seam is the biological criterion
 and the admissibility gate, not "plants".
+
+## Log
+
+| date (EDT) | channel | tag | status |
+| --- | --- | --- | --- |
+| 2026-09-07 | Awesome-Text-to-3D PR #150 | — | open, awaiting maintainer |
+| 2026-09-07 | Tripo / VAST email to support@tripo3d.ai (`sent/2026-09-07-tripo.txt`) | `team-tripo` | sent; one team at a time, next is Meshy after a few days |
+
