@@ -28,7 +28,7 @@ to them after those boards firm, with a result to show.
 | Microsoft TRELLIS | Jiaolong Yang, jiaoyan [at] microsoft.com (Principal Researcher, MSRA; last author) — cc Jianfeng Xiang, t-jxiang [at] microsoft.com (first author) | research group; authors read their own mail |
 | Tencent Hunyuan3D | Discord https://discord.gg/dNBrdrGGMa (a "results" post) and X @TencentHunyuan; team lead is Chunchao Guo, no public email | the README lists no email; Discord is the official channel |
 | Tripo / VAST | support@tripo3d.ai with subject starting "For the research team:", and X @VastAIResearch | only published address; VAST is a research lab, so support forwards |
-| Meshy | support@meshy.ai asking for a forward to marketing/partnerships, plus a post in the Meshy Discord (linked from meshy.ai/about) | no research/press address published; the meshy.ai/contact form is SALES ONLY (required phone/company, scoped for trials) — do not use it |
+| Meshy | the meshy.ai/contact form with topic **"Other"** — Meshy support (09-08) says that routes to their MARKETING team; support@meshy.ai auto-closes partnership mail and points back to the form | no research/press address published; the form looks sales-only but the topic field is the router |
 
 For Hunyuan3D and Meshy the Hugging Face Community post (`model-community-posts.md`) is the
 stronger channel; send the email/form as well but expect the community post to be what they see.
