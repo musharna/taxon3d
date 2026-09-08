@@ -47,3 +47,26 @@ def test_multi_component_plantlike_admits(tmp_path):
     scene = trimesh.Scene([a, b])
     v = structural.evaluate_glb(_save(scene, tmp_path, "scene.glb"))
     assert v.admit
+
+
+# IRON_LAW_OK
+
+
+def test_point_cloud_rejected_as_point_cloud_not_empty(tmp_path):
+    """A capture scan exported as a GLB point cloud has thousands of vertices and no faces. The
+    gate still rejects it (voters cannot judge a point cloud like a mesh), but calling that
+    `empty` misdescribed 43 whole-plant scans as broken outputs (C′ dry run, 2026-09-07)."""
+    pc = trimesh.PointCloud(vertices=[[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
+    scene = trimesh.Scene(pc)
+    p = tmp_path / "pc.glb"
+    scene.export(p)
+    v = structural.evaluate_glb(str(p))
+    assert not v.admit
+    assert v.reason == "point_cloud", v
+    assert v.detail["verts"] == 5 and v.detail["faces"] == 0
+
+
+def test_truly_empty_is_still_empty():
+    """Positive control for the rename: zero vertices keeps the `empty` reason."""
+    v = structural._verdict_for_mesh(trimesh.Trimesh())
+    assert not v.admit and v.reason == "empty"

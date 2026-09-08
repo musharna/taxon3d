@@ -16,7 +16,7 @@ from .admissibility import Verdict
 from .models import Admissibility, ModelOutput
 from .storage import get_storage
 
-VERSION = "structural-v1"
+VERSION = "structural-v2"  # v2: point clouds are `point_cloud`, not `empty`
 
 # Conservative floors. A real 3D plant mesh has thousands of verts/faces and true 3D extent;
 # a degenerate output (single triangle, flat sheet, empty/corrupt) fails one of these.
@@ -48,11 +48,32 @@ def _verdict_for_mesh(mesh) -> Verdict:
     return Verdict(True, "", {"verts": nv, "faces": nf, "extent_ratio": ratio})
 
 
+def _point_cloud_verdict(loaded) -> Verdict | None:
+    """`point_cloud` when the asset carries points but no faces at all; else None.
+
+    `trimesh.load(..., force="mesh")` silently DROPS PointCloud geometry, so a capture scan
+    exported as a GLB point cloud used to reach `_verdict_for_mesh` with 0 vertices and be
+    reported as `empty`. All 43 `empty` verdicts in the study corpus were whole-plant scans
+    (C′ dry run, 2026-09-07). The rejection stands — voters judge meshes — but the reason must
+    say what it saw."""
+    import trimesh  # local import: heavy
+
+    geoms = list(loaded.geometry.values()) if isinstance(loaded, trimesh.Scene) else [loaded]
+    points = sum(len(g.vertices) for g in geoms if isinstance(g, trimesh.PointCloud))
+    faces = sum(len(g.faces) for g in geoms if isinstance(g, trimesh.Trimesh))
+    if points > 0 and faces == 0:
+        return Verdict(False, "point_cloud", {"verts": int(points), "faces": 0})
+    return None
+
+
 def evaluate_glb(path: str) -> Verdict:
     """Load a GLB (concatenated to one mesh) and return an admissibility Verdict."""
     import trimesh  # local import: heavy
 
     try:
+        pc = _point_cloud_verdict(trimesh.load(path))
+        if pc is not None:
+            return pc
         mesh = trimesh.load(path, force="mesh")  # repo idiom (ingest._validate_mesh)
     except Exception as e:  # noqa: BLE001 — a corrupt asset is a reject, not a crash
         return Verdict(False, "unreadable", {"error": str(e)[:200]})
@@ -70,6 +91,9 @@ def evaluate_bytes(data: bytes, file_type: str) -> Verdict:
     import trimesh  # local import: heavy
 
     try:
+        pc = _point_cloud_verdict(trimesh.load(io.BytesIO(data), file_type=file_type))
+        if pc is not None:
+            return pc
         mesh = trimesh.load(io.BytesIO(data), file_type=file_type, force="mesh")
     except Exception as e:  # noqa: BLE001 — a corrupt asset is a reject, not a crash
         return Verdict(False, "unreadable", {"error": str(e)[:200]})
