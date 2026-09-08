@@ -1,19 +1,19 @@
-# GitHub Discussions on model repos
+# Model-page community posts (Hugging Face)
 
-Better than Reddit for this site: the readers are the model's own users and authors, the post is
-on-topic, and a link from a large repo is the inbound link the site lacks. One post per repo, in
-its Discussions tab (Show and tell / General), from your account. Link the model page with a
-team tag.
+Checked 2026-09-07: none of microsoft/TRELLIS, Tencent-Hunyuan/Hunyuan3D-2,
+facebookresearch/sam-3d-objects or VAST-AI-Research/TripoSR has GitHub Discussions enabled, and
+opening an issue for this would be closed on sight. The equivalent that exists is the Community
+tab on each model's Hugging Face page, read by the model's users and watched by its authors.
+One post per model, from your account, linking the model page with a tag.
 
-| repo | model page to link |
-| --- | --- |
-| microsoft/TRELLIS | https://taxon3d.org/models/replicate:trellis2?c=gh-trellis |
-| Tencent-Hunyuan/Hunyuan3D-2 (and 3 if it has Discussions) | https://taxon3d.org/models/fal:hunyuan3d-v3?c=gh-hunyuan |
-| facebookresearch/sam-3d-objects | https://taxon3d.org/models/fal:sam-3d?c=gh-sam3d |
-| VAST-AI-Research/TripoSR | https://taxon3d.org/models/fal:triposr?c=gh-triposr |
+| Hugging Face model (Community tab) | likes | model page to link |
+| --- | --- | --- |
+| microsoft/TRELLIS-image-large | 675 | https://taxon3d.org/models/replicate:trellis2?c=hf-trellis |
+| tencent/Hunyuan3D-2 | 1,811 | https://taxon3d.org/models/fal:hunyuan3d-v3?c=hf-hunyuan |
+| facebook/sam-3d-objects | 464 | https://taxon3d.org/models/fal:sam-3d?c=hf-sam3d |
+| stabilityai/TripoSR | 657 | https://taxon3d.org/models/fal:triposr?c=hf-triposr |
 
-Check each repo has Discussions enabled before writing; if not, skip it rather than opening an
-issue, which maintainers rightly close.
+(tencent/Hunyuan3D-3 is gated; skip.)
 
 **Title:** Results for <Model> on living organisms (blind human votes, with reference photos)
 
@@ -32,6 +32,8 @@ organisms it struggles with), and if a newer checkpoint exists I will run it on 
 Code is MIT, votes are on Hugging Face.
 
 Happy to answer questions about the protocol here.
+
+Keep it to one post per model; a second one reads as spam.
 
 # Plant phenotyping community
 

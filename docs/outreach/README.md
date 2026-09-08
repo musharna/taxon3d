@@ -8,7 +8,7 @@ one produced voters, not just visitors.
 | channel | link to post | cohort tag | who posts |
 | --- | --- | --- | --- |
 | Show HN | `https://taxon3d.org/arena?c=hn` | `hn` | you, from your HN account |
-| GitHub Discussions on model repos | `https://taxon3d.org/models/<slug>?c=gh-<repo>` | `gh-<repo>` | you |
+| Hugging Face model Community tabs | `https://taxon3d.org/models/<slug>?c=hf-<model>` | `hf-<model>` | you |
 | plant phenotyping community / scan-dataset authors | `https://taxon3d.org/arena?c=pheno` | `pheno` | you |
 | r/MachineLearning (optional) | `https://taxon3d.org/arena?c=r-ml` | `r-ml` | you |
 | X / Bluesky / LinkedIn | `https://taxon3d.org/arena?c=social` | `social` | you |
@@ -20,10 +20,10 @@ front-page spike is survivable, but do not stack channels on one day):
 
 1. Awesome-list PRs first — they are slow and cost nothing (`awesome-lists.md`).
 2. Generator-team emails the same day (`generator-teams.md`). Teams share independent results.
-3. GitHub Discussions on the model repos, one per day (`github-discussions.md`).
+3. Hugging Face Community posts on the four model pages, one per day (`model-community-posts.md`).
 4. Show HN on a weekday morning US time (`show-hn.md`). Reply to every comment for 6 hours.
 5. Social threads the day of and the day after HN (`social.md`); phenotyping contacts the
-   same week (`github-discussions.md`, second section). Reddit is optional and r/ML only.
+   same week (`model-community-posts.md`, second section). Reddit is optional and r/ML only.
 
 Measure after each: `/study` cohort counts, `/leaderboard` firm counts, Search Console links
 report (Links → Top linking sites) a week later.
