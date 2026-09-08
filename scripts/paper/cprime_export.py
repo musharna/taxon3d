@@ -32,6 +32,7 @@ from app.judge_render import contact_sheet_path  # noqa: E402
 from app.models import Admissibility, Completeness, ModelOutput, Task, TraitRubric  # noqa: E402
 from scripts.paper.cprime_strata import (  # noqa: E402
     CALIBRATION_N,
+    EXCLUDED_FORMAT,
     SENSITIVITY_N,
     STRATA,
     TARGETS,
@@ -79,7 +80,9 @@ def build_populations(db: Session) -> tuple[dict[str, list[int]], dict[int, dict
     completeness = dict(db.execute(select(Completeness.output_id, Completeness.category)).all())
 
     pops: dict[str, list[int]] = {s: [] for s in STRATA}
-    info: dict[int, dict] = {-1: {"excluded_completeness_only": 0, "excluded_unevaluated": 0}}
+    info: dict[int, dict] = {
+        -1: {"excluded_completeness_only": 0, "excluded_unevaluated": 0, "excluded_format": 0}
+    }
     outs = db.execute(
         select(ModelOutput).where(ModelOutput.is_gold.is_(False), ModelOutput.hidden_at.is_(None))
     ).scalars()
@@ -88,8 +91,8 @@ def build_populations(db: Session) -> tuple[dict[str, list[int]], dict[int, dict
         admitted = o.id not in rejected
         if not admitted and not v.get("structural_reason") and not v.get("semantic_seen"):
             # An output is classified by whichever predicate rejected it. A structural reject is
-            # complete on its own: the semantic judge is never run on an empty mesh, so demanding
-            # a semantic row too would drop every `empty` output out of the frame. Only when
+            # complete on its own: the semantic judge is never run on a structurally rejected
+            # asset, so demanding a semantic row too would miscount every point cloud. Only when
             # NOTHING that could explain the rejection has looked at it is it truly unevaluated —
             # the gate failed closed on it. Count those; never classify them.
             info[-1]["excluded_unevaluated"] += 1
@@ -103,6 +106,11 @@ def build_populations(db: Session) -> tuple[dict[str, list[int]], dict[int, dict
             )
         except ValueError:
             info[-1]["excluded_completeness_only"] += 1
+            continue
+        if stratum == EXCLUDED_FORMAT:
+            # A point-cloud scan: the gate looked at it and rejected its FORMAT. Counted, never
+            # shown to a rater — "is this a whole organism?" cannot audit a zero-faces rule.
+            info[-1]["excluded_format"] += 1
             continue
         pops[stratum].append(o.id)
         info[o.id] = {

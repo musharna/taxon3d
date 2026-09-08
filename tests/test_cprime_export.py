@@ -29,17 +29,17 @@ def _sheet(oid: int) -> Path:
 
 
 def _seed(db):
-    """6 outputs on one task: 2 admitted, 1 struct empty, 1 novel multiple, 1 sem-also, 1 completeness-only."""
+    """6 outputs on one task: 2 admitted, 1 point-cloud scan, 1 novel multiple, 1 sem-also, 1 completeness-only."""
     outs = make_outputs(db, 6)
     ok = Verdict(True, "")
     db.add(TraitRubric(taxon="Zea mays", task_id=outs[0].task_id, traits_json="[]"))
-    # The struct_empty row carries NO semantic verdict on purpose: an empty mesh is never sent to
-    # the semantic judge, so in the real corpus all 43 visible `empty` rejects have no semantic
-    # row. A fixture that gave them one hid a whole missing stratum.
+    # The point-cloud row carries NO semantic verdict on purpose: a structural reject is never
+    # sent to the semantic judge. It must be COUNTED as a format exclusion, not dropped as
+    # "unevaluated" and not classified into a stratum.
     plan = [
         ("admitted", ok, Verdict(True, "", {"code": "ok"}), "complete"),
         ("admitted", ok, Verdict(True, "", {"code": "ok"}), "complete"),
-        ("struct_empty", Verdict(False, "empty"), None, "fragment"),
+        ("excluded_format", Verdict(False, "point_cloud"), None, "fragment"),
         ("novel_multiple", ok, Verdict(False, "multiple", {"code": "multiple"}), "complete"),
         (
             "sem_also_completeness",
@@ -67,8 +67,11 @@ def test_build_populations_uses_gate_and_drops_completeness_only():
         pops, info = build_populations(db)
     ids = {o.id for o in outs}
     got = {oid: s for s, lst in pops.items() for oid in lst if oid in ids}
-    assert got == {oid: s for oid, s in expect.items() if s != "completeness_only"}
+    assert got == {
+        oid: s for oid, s in expect.items() if s not in ("completeness_only", "excluded_format")
+    }
     assert info[-1]["excluded_completeness_only"] >= 1
+    assert info[-1]["excluded_format"] >= 1
     novel = [o for o in outs if expect[o.id] == "novel_multiple"][0]
     assert info[novel.id]["taxon"] == "Zea mays"
     assert info[novel.id]["semantic_code"] == "multiple"
@@ -132,19 +135,23 @@ def test_export_fails_loud_on_missing_sheet(tmp_path):
 # IRON_LAW_OK
 
 
-def test_structural_reject_without_a_semantic_row_is_still_classified():
-    """An empty mesh never reaches the semantic judge, so it has no semantic verdict row. It is
-    still a structural reject and belongs in the frame — treating "no semantic row" as
-    unevaluated silently drops the entire struct_empty stratum from the audit."""
+@pytest.mark.parametrize("reason", ["empty", "point_cloud"])
+def test_point_cloud_structural_reject_is_counted_as_format_exclusion(reason):
+    """A point-cloud scan never reaches the semantic judge, so it has no semantic verdict row.
+    It is NOT unevaluated (the gate did look at it) and it is NOT in any stratum (the rejection
+    is on format, which the human question cannot audit): it is counted. Rows scored before
+    structural-v2 still say `empty`; both spellings mean the same 43 scans."""
     with SessionLocal() as db:
         out = make_outputs(db, 1)[0]
-        upsert_verdict(db, out.id, "structural", Verdict(False, "empty"), "structural-v1")
+        upsert_verdict(db, out.id, "structural", Verdict(False, reason), "structural-v1")
         db.add(Completeness(output_id=out.id, category="fragment", checklist_json="{}"))
         db.commit()
         _sheet(out.id)
         pops, info = build_populations(db)
-    assert out.id in pops["struct_empty"]
-    assert out.id in info
+    assert all(out.id not in ids for ids in pops.values())
+    assert out.id not in info
+    assert info[-1]["excluded_format"] >= 1
+    assert info[-1]["excluded_unevaluated"] == 0 or out.id not in info
 
 
 def test_not_admitted_with_no_verdict_at_all_counts_as_unevaluated():

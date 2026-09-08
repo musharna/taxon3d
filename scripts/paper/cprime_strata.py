@@ -15,7 +15,6 @@ from collections import defaultdict
 
 STRATA: tuple[str, ...] = (
     "struct_degenerate_bbox",
-    "struct_empty",
     "novel_multiple",
     "novel_not_the_organism",
     "novel_sub_part",
@@ -26,13 +25,12 @@ STRATA: tuple[str, ...] = (
 
 TARGETS: dict[str, int] = {
     "struct_degenerate_bbox": 1,
-    "struct_empty": 15,
     "novel_multiple": 46,
     "novel_not_the_organism": 31,
     "novel_sub_part": 2,
     "sem_also_completeness": 30,
     "sem_only_other": 13,
-    "admitted": 128,
+    "admitted": 143,
 }
 
 # Population per stratum in the live frame, measured 2026-09-06 against data/study/arena-study.db
@@ -46,9 +44,15 @@ TARGETS: dict[str, int] = {
 # strata that still have headroom, keeping the total at 266: the two remaining `novel` cells to
 # their full population, +3 to sem_only_other, and +8 to `admitted`, which carries the
 # false-negative rate that the second go/no-go criterion reads.
+#
+# Amendment 2026-09-07 (before any label existed): the `struct_empty` stratum (43 in frame, 15
+# sampled) is GONE. Every one of those 43 is a capture-scan point cloud (Plant3D, Crops3D, ROSE-X,
+# ICRISAT, IPK MRI, ROMI), rejected on FORMAT — zero faces — not on biology; structural-v2 now
+# names the reason `point_cloud`. A human asked "is this a whole organism?" sees a whole plant
+# on every one, so the stratum could only ever have measured the wrong thing. Its 15 slots go to
+# `admitted` (128 -> 143), the false-negative cell. The 43 are reported as a format exclusion.
 FRAME_SIZES: dict[str, int] = {
     "struct_degenerate_bbox": 1,
-    "struct_empty": 43,
     "novel_multiple": 46,
     "novel_not_the_organism": 31,
     "novel_sub_part": 2,
@@ -59,6 +63,11 @@ FRAME_SIZES: dict[str, int] = {
 
 CALIBRATION_N = 20
 SENSITIVITY_N = 40
+
+# Structural reasons that describe the asset's FORMAT, not the organism. `empty` is what
+# structural-v1 wrote for the same files before the rename; both spellings leave the frame.
+FORMAT_REASONS: frozenset[str] = frozenset({"empty", "point_cloud"})
+EXCLUDED_FORMAT = "excluded_format"  # sentinel returned by assign_stratum; never a stratum
 
 _COMPLETENESS_REJECTS = {"fragment", "isolated-organ"}
 _SEMANTIC_REJECTS = {"multiple", "sub_part", "not_the_organism"}
@@ -71,11 +80,14 @@ def assign_stratum(
     semantic_code: str | None,
     completeness_category: str | None,
 ) -> str:
-    """Structural failures take precedence (they are judged from the mesh, not the sheet); then
+    """Format rejections (point clouds) leave the frame under EXCLUDED_FORMAT. Other structural
+    failures take precedence (they are judged from the mesh, not the sheet); then
     semantic rejects split by what the completeness gate said about the same output. An output
     rejected ONLY by completeness is not part of this audit and is an error to classify."""
     if admitted:
         return "admitted"
+    if structural_reason in FORMAT_REASONS:
+        return EXCLUDED_FORMAT
     if structural_reason:
         return f"struct_{structural_reason}"
     if semantic_code not in _SEMANTIC_REJECTS:

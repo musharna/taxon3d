@@ -44,15 +44,6 @@ def test_strata_names_and_targets_align():
         (
             dict(
                 admitted=False,
-                structural_reason="empty",
-                semantic_code="not_the_organism",
-                completeness_category="fragment",
-            ),
-            "struct_empty",
-        ),
-        (
-            dict(
-                admitted=False,
                 structural_reason="",
                 semantic_code="multiple",
                 completeness_category="complete",
@@ -209,3 +200,29 @@ def test_capped_strata_take_their_whole_population():
 
     for s in ("struct_degenerate_bbox", "novel_sub_part"):
         assert TARGETS[s] == FRAME_SIZES[s]
+
+
+# IRON_LAW_OK
+
+
+@pytest.mark.parametrize("reason", ["empty", "point_cloud"])
+def test_point_cloud_scans_are_excluded_from_the_frame(reason):
+    """Every `empty` structural verdict in the corpus is a capture-scan point cloud (43 of 43,
+    verified 2026-09-07). The gate rejects those on FORMAT, so a human asked "is this a whole
+    organism?" cannot audit that rejection. They leave the frame under a sentinel that is NOT a
+    stratum, and the export counts them instead."""
+    from scripts.paper.cprime_strata import EXCLUDED_FORMAT
+
+    got = assign_stratum(
+        admitted=False, structural_reason=reason, semantic_code=None, completeness_category=None
+    )
+    assert got == EXCLUDED_FORMAT
+    assert EXCLUDED_FORMAT not in STRATA
+    assert "struct_empty" not in STRATA
+
+
+def test_freed_point_cloud_slots_went_to_admitted():
+    """15 slots left the frame with the point-cloud stratum; the total stays 266 and the freed
+    slots go to the false-negative cell, the second go/no-go criterion."""
+    assert TARGETS["admitted"] == 143
+    assert sum(TARGETS.values()) == 266

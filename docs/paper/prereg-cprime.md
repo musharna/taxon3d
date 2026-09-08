@@ -10,7 +10,8 @@ predictive value), and do its admissions leak inadmissible outputs (false-negati
 
 ## Gate under audit
 
-Structural predicate `structural-v1` (`app/structural.py`), completeness gate on categories
+Structural predicate `structural-v1` as recorded in the study DB (`app/structural.py` is
+`structural-v2` since Amendment 1; the only difference is the reason label for point clouds), completeness gate on categories
 `isolated-organ, fragment`, semantic predicate `semantic-v2` (`app/semantic.py`, reject codes
 `multiple, sub_part, not_the_organism`; `ok`/`uncertain` admit). Frozen: no verdict row changes
 during the study.
@@ -25,14 +26,13 @@ completeness predicate alone are outside this audit's scope; 0 are unevaluated.
 | stratum | population | sampled | inclusion probability |
 | ------- | ---------- | ------- | --------------------- |
 | `struct_degenerate_bbox` | 1 | 1 | 1.0000 |
-| `struct_empty` | 43 | 15 | 0.3488 |
 | `novel_multiple` | 46 | 46 | 1.0000 |
 | `novel_not_the_organism` | 31 | 31 | 1.0000 |
 | `novel_sub_part` | 2 | 2 | 1.0000 |
 | `sem_also_completeness` | 91 | 30 | 0.3297 |
 | `sem_only_other` | 18 | 13 | 0.7222 |
-| `admitted` | 552 | 128 | 0.2319 |
-| **total** | **784** | **266** | |
+| `admitted` | 552 | 143 | 0.2591 |
+| **total** | **741** | **266** | |
 
 Two strata are sampled exhaustively (inclusion probability 1) because the visible corpus
 cannot fill them: release #161 hid 3 of the 4 `degenerate_bbox` outputs and 15 of the 17
@@ -41,11 +41,33 @@ that filter was applied. Their 18 freed slots were reallocated BEFORE any label 
 the two remaining novel cells (to their full population), +3 to `sem_only_other` and +8 to
 `admitted`, holding the total at 266. `novel_sub_part` therefore rests on n=2 and its
 interval will be uninformative on its own; the pooled novel-stratum PPV is the criterion.
-The `admitted` row's 0.2319 is the overall rate: that stratum is allocated across tasks by
+The `admitted` row's 0.2591 is the overall rate: that stratum is allocated across tasks by
 largest remainder, so each item's recorded inclusion probability is its own task cell's
 sampled/population, and the Horvitz-Thompson weights use those per-cell values.
 
 Calibration set: 20 items, excluded. Sensitivity arm: 40 main items re-labelled from the mesh.
+
+### Amendment 1 — 2026-09-07, before any rater label existed
+
+The registered frame had a `struct_empty` stratum (43 in population, 15 sampled, inclusion
+0.3488). A dry run of the calibration packet by the rubric author (whose labels are excluded
+by design) showed those items depict whole plants. Verified against the study DB: all 43
+outputs the structural predicate rejected as `empty` load as a single point cloud with zero
+faces, and all 43 come from `capture_scan` generators (Plant3D, Crops3D, ROSE-X, ICRISAT
+legumes, IPK barley MRI, ROMI Arabidopsis). The gate rejects them on file format, not on the
+organism, so the rater question "is this a single whole organism?" cannot audit that
+rejection and the stratum would have read as 43 gate errors by construction.
+
+Changes: (1) `app/structural.py` is now `structural-v2` and names the reason `point_cloud`;
+verdict rows in the frozen study DB still read `empty`, and `assign_stratum` treats both
+spellings as the same format exclusion. (2) The 43 leave the frame and are reported as
+`excluded_format` beside the 33 completeness-only exclusions. (3) Their 15 slots go to
+`admitted` (128 → 143; inclusion 0.2319 → 0.2591), the false-negative cell. Total stays 266.
+(4) The export was re-run with the same seed; 174 of 286 items are shared with the
+superseded draw (kept at `data/paper/cprime_export_20260906_superseded/`, never shown to a
+rater). The `structural_sheet.csv` for the 3D-literate rater now holds the single
+`degenerate_bbox` item. Everything else in this document is unchanged. Analysis code is
+frozen at the commit that lands this amendment.
 
 ## Raters
 

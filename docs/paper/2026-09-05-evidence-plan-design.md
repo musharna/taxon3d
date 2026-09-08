@@ -74,17 +74,21 @@ by `build_populations()` and reproduced in `docs/paper/prereg-cprime.md`, are:
 | stratum                                               | population | sample | inclusion prob. |
 | ----------------------------------------------------- | ---------- | ------ | --------------- |
 | structural `degenerate_bbox`                          | 1          | 1      | 1.000           |
-| structural `empty`                                    | 43         | 15     | 0.349           |
 | semantic-only on `complete` — `multiple`              | 46         | 46     | 1.000           |
 | semantic-only on `complete` — `not_the_organism`      | 31         | 31     | 1.000           |
 | semantic-only on `complete` — `sub_part`              | 2          | 2      | 1.000           |
 | semantic rejects the completeness gate also catches   | 91         | 30     | 0.330           |
 | semantic rejects NOT on `complete` (`sem_only_other`) | 18         | 13     | 0.722           |
-| admitted (false-negative cell), stratified by task    | 552        | 128    | 0.232           |
+| admitted (false-negative cell), stratified by task    | 552        | 143    | 0.259           |
 
-266 items, three labels each on the main set, plus a 20-item calibration set.
+266 items, three labels each on the main set, plus a 20-item calibration set. A further 43
+outputs the structural predicate rejects are capture-scan point clouds (zero faces): they are
+a format exclusion, reported beside the 33 completeness-only exclusions, not a stratum — see
+`docs/paper/prereg-cprime.md` Amendment 1 (2026-09-07).
 
-Two changes from the original table, both made before any label existed. First, a
+Three changes from the original table, all made before any label existed. Zeroth, the
+`struct_empty` stratum (43 / 15) was removed as described above and its 15 slots moved to
+`admitted` (128 → 143). First, a
 `sem_only_other` stratum was added: 18 rejected outputs sit on `partial-organism` or carry no
 completeness row at all, and an estimate cannot omit a cell of its own population. Second,
 `degenerate_bbox` (4 → 1) and `sub_part`-on-`complete` (17 → 2) are far smaller once hidden

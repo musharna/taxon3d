@@ -8,7 +8,7 @@ if (length(args) != 2) stop("usage: fig_cprime_ppv.R results.json out.png")
 if (!file.exists(args[[1]])) stop("no such file: ", args[[1]])
 res <- fromJSON(args[[1]], simplifyVector = FALSE)
 
-order <- c("struct_degenerate_bbox", "struct_empty", "novel_multiple", "novel_not_the_organism",
+order <- c("struct_degenerate_bbox", "novel_multiple", "novel_not_the_organism",
            "novel_sub_part", "sem_also_completeness", "sem_only_other", "admitted")
 rows <- lapply(order, function(s) {
   d <- res$per_stratum[[s]]

@@ -21,7 +21,6 @@ def _fixture(tmp_path: Path) -> Path:
     for i, s in enumerate(
         [
             "struct_degenerate_bbox",
-            "struct_empty",
             "novel_multiple",
             "novel_not_the_organism",
             "novel_sub_part",
