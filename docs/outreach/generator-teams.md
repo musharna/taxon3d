@@ -37,8 +37,8 @@ tied with TRELLIS 2 within the interval, 117 games">. The page is here:
 <link with team tag>
 
 Two things you might want:
-- Every comparison your model appeared in, with the input photo and the opponent revealed,
-  is downloadable from the model page and from the Hugging Face dataset.
+- The model page shows the head-to-head record against every opponent it has met, and every
+  leaderboard vote is in the Hugging Face preferences table with generators revealed.
 - If a newer version exists, I will run it on the same tasks; the submission form is at
   taxon3d.org/submit.
 
