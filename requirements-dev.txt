@@ -5,7 +5,7 @@
 
 pytest==9.1.1
 httpx==0.28.1
-ruff==0.15.15  # lint + format; MUST match .github/workflows/ci.yml (lint job installs ruff alone).
+ruff==0.16.6  # lint + format; MUST match .github/workflows/ci.yml (lint job installs ruff alone).
                # 0.16.x adds ~770 findings + reformats 21 files against this tree; upgrade both
                # pins together. Pinned because an unpinned formatter rewrites files differently
                # per machine, and `ruff format` is run against this tree by hand
