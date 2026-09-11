@@ -43,4 +43,7 @@ and the admissibility gate, not "plants".
 | 2026-09-08 | Meshy: support@meshy.ai (forward request) + Discord; contact form is sales-only, skipped (`sent/2026-09-08-meshy.txt`) | `team-meshy` | email sent 2026-09-08; Discord post held |
 | 2026-09-08 | TRELLIS authors: jiaoyan@ + t-jxiang@ (`sent/2026-09-08-trellis.txt`) | `team-trellis` | sent 2026-09-08 |
 | 2026-09-08 | Meshy support auto-closed the email: "use meshy.ai/contact, select Other → marketing team". Form submission with the trimmed message | `team-meshy` | form submitted 2026-09-08 |
-| 2026-09-10 | Hugging Face Community posts x4 (`sent/2026-09-10-hf-community.txt`) | `hf-trellis` `hf-hunyuan` `hf-sam3d` `hf-triposr` | staged, awaiting user to post |
+| 2026-09-10 | HF Community: microsoft/TRELLIS-image-large [#27](https://huggingface.co/microsoft/TRELLIS-image-large/discussions/27) | `hf-trellis` | posted 2026-09-10 |
+| 2026-09-10 | HF Community: tencent/Hunyuan3D-2 [#63](https://huggingface.co/tencent/Hunyuan3D-2/discussions/63) | `hf-hunyuan` | posted 2026-09-10 |
+| 2026-09-10 | HF Community: facebook/sam-3d-objects [#25](https://huggingface.co/facebook/sam-3d-objects/discussions/25) | `hf-sam3d` | posted 2026-09-10 |
+| 2026-09-10 | HF Community: stabilityai/TripoSR [#14](https://huggingface.co/stabilityai/TripoSR/discussions/14) | `hf-triposr` | posted 2026-09-10 |
