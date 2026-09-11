@@ -1,0 +1,100 @@
+Four Hugging Face Community posts — staged 2026-09-10.
+One post per model page, from your HF account. Post them a day or two apart, not all at once.
+Board numbers are live as of 2026-09-10 (image-to-3D board, 12 models, 1,614 votes total).
+Rank is a tier: models whose intervals overlap share a rank.
+
+================================================================
+1of4  ->  https://huggingface.co/microsoft/TRELLIS-image-large   (Community tab)
+================================================================
+TITLE:
+Results for TRELLIS on living organisms (blind human votes, with reference photos)
+
+BODY:
+I run Taxon3D, a blind pairwise arena where people compare two anonymised 3D models of a named
+organism, with CC-licensed photos of the real thing beside them. TRELLIS 2 is currently in the
+top tier of the image-to-3D board: Bradley-Terry score 1067, 95% interval 995 to 1137, over 51
+head-to-head games. Its record against every opponent it has met is here:
+
+https://taxon3d.org/models/replicate:trellis2?c=hf-trellis
+
+Every task ships the input photo, so you can see exactly what the model was given. The set is
+plants, fungi and animals, which are harder than props: thin surfaces, branching, self-occlusion.
+
+Two things that might be useful here: the failure modes are visible per task, so you can see
+which organisms it struggles with, and if a newer checkpoint exists I will run it on the same
+tasks. Code is MIT and the votes are published on Hugging Face.
+
+Happy to answer questions about the protocol.
+
+================================================================
+2of4  ->  https://huggingface.co/tencent/Hunyuan3D-2   (Community tab)
+================================================================
+TITLE:
+Results for Hunyuan3D on living organisms (blind human votes, with reference photos)
+
+BODY:
+I run Taxon3D, a blind pairwise arena where people compare two anonymised 3D models of a named
+organism, with CC-licensed photos of the real thing beside them. Three Hunyuan3D checkpoints are
+on the image-to-3D board. Hunyuan3D v3 scores 1044, 95% interval 1001 to 1089, over 112
+head-to-head games, which puts it in the second tier of 12 models. v2 and 3.1 are also ranked.
+Every head-to-head record is here:
+
+https://taxon3d.org/models/fal:hunyuan3d-v3?c=hf-hunyuan
+
+Every task ships the input photo, so you can see exactly what the model was given. The set is
+plants, fungi and animals, which are harder than props: thin surfaces, branching, self-occlusion.
+
+Two things that might be useful here: the failure modes are visible per task, so you can see
+which organisms each checkpoint struggles with, and having three versions on the same tasks makes
+the version-to-version change measurable rather than anecdotal. Code is MIT and the votes are
+published on Hugging Face.
+
+Happy to answer questions about the protocol.
+
+================================================================
+3of4  ->  https://huggingface.co/facebook/sam-3d-objects   (Community tab)
+================================================================
+TITLE:
+Results for SAM 3D on living organisms (blind human votes, with reference photos)
+
+BODY:
+I run Taxon3D, a blind pairwise arena where people compare two anonymised 3D models of a named
+organism, with CC-licensed photos of the real thing beside them. SAM 3D is on the image-to-3D
+board with a Bradley-Terry score of 941, 95% interval 872 to 991, over 126 head-to-head games,
+which is the most games of any model in the set. Its record against every opponent is here:
+
+https://taxon3d.org/models/fal:sam-3d?c=hf-sam3d
+
+Every task ships the input photo, so you can see exactly what the model was given. The set is
+plants, fungi and animals, which are harder than props: thin surfaces, branching, self-occlusion.
+That last part is where the interesting failures are, and they are visible per task rather than
+averaged away.
+
+If a newer checkpoint appears I will run it on the same tasks. Code is MIT and the votes are
+published on Hugging Face.
+
+Happy to answer questions about the protocol.
+
+================================================================
+4of4  ->  https://huggingface.co/stabilityai/TripoSR   (Community tab)
+================================================================
+TITLE:
+Results for TripoSR on living organisms (blind human votes, with reference photos)
+
+BODY:
+I run Taxon3D, a blind pairwise arena where people compare two anonymised 3D models of a named
+organism, with CC-licensed photos of the real thing beside them. TripoSR is on the image-to-3D
+board at a Bradley-Terry score of 834, but with only 28 head-to-head games the 95% interval runs
+from 582 to 956, so it is genuinely not separated from several models above it yet. I would
+rather say that than quote a rank it has not earned. Its record so far:
+
+https://taxon3d.org/models/fal:triposr?c=hf-triposr
+
+Every task ships the input photo, so you can see exactly what the model was given. The set is
+plants, fungi and animals, which are harder than props: thin surfaces, branching, self-occlusion.
+
+TripoSR is the fastest model in the set by a wide margin, and the board does not weight that at
+all, so read the score as quality alone. More votes will tighten that interval. Code is MIT and
+the votes are published on Hugging Face.
+
+Happy to answer questions about the protocol.
