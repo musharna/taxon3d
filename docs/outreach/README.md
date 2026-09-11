@@ -37,9 +37,10 @@ and the admissibility gate, not "plants".
 
 | date (EDT) | channel | tag | status |
 | --- | --- | --- | --- |
-| 2026-09-07 | Awesome-Text-to-3D PR #150 | — | open, awaiting maintainer |
+| 2026-09-07 | Awesome-Text-to-3D PR #150 | — | MERGED 2026-09-09; listed, no sessions from it as of 09-10 |
 | 2026-09-07 | Tripo / VAST email to support@tripo3d.ai (`sent/2026-09-07-tripo.txt`) | `team-tripo` | sent; one team at a time, next is Meshy after a few days |
 | 2026-09-08 | Tripo support replied (ticket #20260908000136): "reach out to business@tripo3d.ai". Follow-up drafted (`sent/2026-09-08-tripo-business.txt`) | `team-tripo` | sent 2026-09-08 |
 | 2026-09-08 | Meshy: support@meshy.ai (forward request) + Discord; contact form is sales-only, skipped (`sent/2026-09-08-meshy.txt`) | `team-meshy` | email sent 2026-09-08; Discord post held |
 | 2026-09-08 | TRELLIS authors: jiaoyan@ + t-jxiang@ (`sent/2026-09-08-trellis.txt`) | `team-trellis` | sent 2026-09-08 |
 | 2026-09-08 | Meshy support auto-closed the email: "use meshy.ai/contact, select Other → marketing team". Form submission with the trimmed message | `team-meshy` | form submitted 2026-09-08 |
+| 2026-09-10 | Hugging Face Community posts x4 (`sent/2026-09-10-hf-community.txt`) | `hf-trellis` `hf-hunyuan` `hf-sam3d` `hf-triposr` | staged, awaiting user to post |
