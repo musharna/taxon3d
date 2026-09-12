@@ -84,7 +84,7 @@ TAXA = [
 
 def _get(url: str) -> dict:
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310 — fixed https host
+    with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310 — fixed https host  # nosec B310 - callers build https api.inaturalist.org URLs
         return json.loads(r.read().decode())
 
 
@@ -389,7 +389,7 @@ def source_taxon(binomial: str, n: int, force: bool) -> dict:
     for i, p in enumerate(photos, 1):
         fn = f"{i}.jpg"
         req = urllib.request.Request(p["url"], headers={"User-Agent": UA})
-        with urllib.request.urlopen(req, timeout=60) as r:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=60) as r:  # noqa: S310  # nosec B310 - photo URL returned by the iNaturalist API
             (d / fn).write_bytes(r.read())
         manifest.append({"file": fn, **p})
         time.sleep(0.4)  # polite to iNat

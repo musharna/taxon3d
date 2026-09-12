@@ -43,7 +43,7 @@ UA = "bio3d-arena/0.1 (+https://github.com/musharna/taxon3d; indexnow submitter)
 
 def _get(url: str) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:  # nosec B310 - operator's --base-url (default https://taxon3d.org)
         return r.read().decode("utf-8")
 
 
@@ -75,7 +75,7 @@ def submit(payload: dict, *, dry_run: bool) -> int:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:  # nosec B310 - indexnow.ENDPOINT constant
             print(f"  HTTP {r.status} — {_MEANING.get(r.status, 'see indexnow.org')}")
             return 0
     except urllib.error.HTTPError as e:

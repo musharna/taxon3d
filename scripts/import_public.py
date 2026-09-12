@@ -127,7 +127,7 @@ def sync_id_sequences(conn) -> dict[str, int]:
     ).all()
     fixed: dict[str, int] = {}
     for s in seqs:
-        mx = conn.execute(text(f'select max("{s.col}") from "{s.tbl}"')).scalar()
+        mx = conn.execute(text(f'select max("{s.col}") from "{s.tbl}"')).scalar()  # nosec B608 - identifiers read from the pg catalog and double-quoted
         if mx is None:  # empty table: setval(seq, NULL) raises
             continue
         if (s.last_value or 0) < mx:

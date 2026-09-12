@@ -36,7 +36,7 @@ def swap_group_id(
     """Order-independent id for one logical comparison (links the A/B & B/A votes)."""
     lo, hi = sorted((output_id_x, output_id_y))
     raw = f"{task_id}:{lo}:{hi}:{criterion_id}:{condition}"
-    return hashlib.sha1(raw.encode()).hexdigest()[:16]
+    return hashlib.sha1(raw.encode(), usedforsecurity=False).hexdigest()[:16]
 
 
 def _img(b64: str) -> dict:

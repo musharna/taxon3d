@@ -32,7 +32,7 @@ PDB_SOURCES = [
 
 def _fetch(url: str, dest: Path) -> bool:
     try:
-        with urllib.request.urlopen(url, timeout=30) as r:  # noqa: S310 — trusted RCSB host
+        with urllib.request.urlopen(url, timeout=30) as r:  # noqa: S310 — trusted RCSB host  # nosec B310 - callers pass https files.rcsb.org URLs
             dest.write_bytes(r.read())
         return True
     except Exception as exc:  # noqa: BLE001 — surface the fetch failure, keep going

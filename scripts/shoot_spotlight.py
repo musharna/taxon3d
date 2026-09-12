@@ -107,7 +107,7 @@ def _seed_test_subject() -> str:
 def _wait_ready(url: str, retries: int = 20, delay: float = 0.3) -> None:
     for _ in range(retries):
         try:
-            urllib.request.urlopen(url, timeout=2)
+            urllib.request.urlopen(url, timeout=2)  # nosec B310 - local http://127.0.0.1 server this script started
             return
         except Exception:  # noqa: BLE001
             time.sleep(delay)
@@ -115,7 +115,7 @@ def _wait_ready(url: str, retries: int = 20, delay: float = 0.3) -> None:
 
 
 def _fetch(url: str) -> str:
-    with urllib.request.urlopen(url, timeout=10) as r:
+    with urllib.request.urlopen(url, timeout=10) as r:  # nosec B310 - local http://127.0.0.1 server this script started
         return r.read().decode()
 
 

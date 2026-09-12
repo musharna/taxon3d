@@ -13,7 +13,7 @@ from playwright.sync_api import sync_playwright
 
 BASE = "http://127.0.0.1:8099"
 TAG = sys.argv[1] if len(sys.argv) > 1 else "before"
-OUT = pathlib.Path("/tmp/mobile-audit") / TAG
+OUT = pathlib.Path("/tmp/mobile-audit") / TAG  # nosec B108 - dev-only screenshot scratch dir
 OUT.mkdir(parents=True, exist_ok=True)
 
 VIEWPORTS = [("390x844", 390, 844), ("430x932", 430, 932)]
