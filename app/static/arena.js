@@ -653,9 +653,9 @@ function disableVoteBar(disabled) {
 }
 
 function rankLabelFor(side, winner) {
-  if (winner === "tie") return "tie";
+  if (winner === "tie") return "TIE";
   if (winner === "bad") return ""; // "both bad" vote — no rank to show (chip suppressed)
-  return winner === side ? "1st" : "2nd";
+  return winner === side ? "1ST" : "2ND";
 }
 
 // 2-up pairwise reveal: name pills + rank chips on the two stages, gold border on the winner.
@@ -676,7 +676,7 @@ function showReveal(reveal) {
     if (chipEl) {
       const label = rankLabelFor(side, reveal.winner);
       chipEl.textContent = label;
-      chipEl.classList.toggle("is-first", label === "1st");
+      chipEl.classList.toggle("is-first", label === "1ST");
       chipEl.hidden = !label; // both-bad → empty label → no chip
     }
     if (col && reveal.winner === side) col.classList.add("is-winner");
