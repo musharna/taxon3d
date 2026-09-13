@@ -90,16 +90,16 @@
     <table class="ranktable lb-ranktable">
       <thead>
         <tr>
-          <th class="lb-th-rank" title="Models with overlapping 95% CIs share a rank">Rank</th>
-          <th>Generator</th>
-          <th class="num">BT score</th>
+          <th class="lb-th-rank" title="Models with overlapping 95% CIs share a rank">RANK</th>
+          <th>GENERATOR</th>
+          <th class="num">BT SCORE</th>
           <th>
-            95% interval{% if brows %}
+            95% INTERVAL{% if brows %}
             <span class="ci-axis mono" title="The whisker bars span this BT range">BT {{ brows[0].ci_lo }}–{{ brows[0].ci_hi }}</span>{% endif %}
           </th>
-          <th>Trend</th>
-          <th class="num">Votes</th>
-          <th title="A rank is firm once it is backed by {{ firm_vote_threshold }}+ votes; below that it is still being evaluated">Status</th>
+          <th>TREND</th>
+          <th class="num">VOTES</th>
+          <th title="A rank is firm once it is backed by {{ firm_vote_threshold }}+ votes; below that it is still being evaluated">STATUS</th>
         </tr>
       </thead>
       <tbody>

@@ -20,7 +20,7 @@
     {% set parts = s.task_title.split(' — ', 1) %}
     <a href="/spotlight/{{ s.slug }}" class="sp-idx-card">
       <div class="sp-idx-stage">
-        {% if s.featured %}<span class="sp-idx-featured"><span class="cat-chip">featured</span></span>{% endif %}
+        {% if s.featured %}<span class="sp-idx-featured"><span class="cat-chip">FEATURED</span></span>{% endif %}
         {# "N models" = count of non-gold outputs on this subject's task (same population the
            detail page lists) — SPOTLIGHTS carries no cached count, so it's computed once
            per request in the /spotlight route, not fabricated. Omitted when the subject's

@@ -525,7 +525,6 @@ textarea:focus-visible,
 /* Compact inline selects in the strip — label sits above a small pill select. */
 .task-strip .filter-row label {
   font-size: 0.68rem;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--faint);
 }
@@ -886,7 +885,6 @@ textarea:focus-visible,
   font-size: 0.66rem;
   font-weight: 600;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--muted);
   background: var(--ctlBg);
   border: 1px solid var(--border);
@@ -1216,7 +1214,6 @@ kbd {
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.07em;
-  text-transform: uppercase;
 }
 .ranktable tbody tr {
   transition: background 0.12s;
@@ -1739,7 +1736,6 @@ kbd {
 }
 /* Design ref shows the badge upper-cased ("FEATURED"); .cat-chip is shared so scope it here. */
 .sp-idx-featured .cat-chip {
-  text-transform: uppercase;
   letter-spacing: 0.07em;
 }
 /* "N models" badge — BOTTOM-right of the stage (design places it below the subject). */
@@ -2409,7 +2405,6 @@ details.group[open] > summary.group-title::before {
   font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.1em;
-  text-transform: uppercase;
   color: var(--faint);
   padding: 15px 11px 5px;
 }
@@ -2539,7 +2534,6 @@ details.group[open] > summary.group-title::before {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.09em;
-  text-transform: uppercase;
   color: var(--faint);
 }
 .b3d-kbar-right {
@@ -2554,7 +2548,6 @@ details.group[open] > summary.group-title::before {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--accent);
   background: color-mix(in oklch, var(--accent) 12%, transparent);
   border: 1px solid color-mix(in oklch, var(--accent) 40%, transparent);
@@ -2802,7 +2795,6 @@ details.group[open] > summary.group-title::before {
 }
 .b3d-roadmap-eyebrow {
   color: var(--amber);
-  text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 0.78rem;
   margin: 0 0 0.6rem;
@@ -2908,7 +2900,6 @@ details.group[open] > summary.group-title::before {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.72rem;
   letter-spacing: 0.24em;
-  text-transform: uppercase;
   color: var(--accent2);
 }
 .b3d-hero-h1 {
@@ -3023,7 +3014,6 @@ details.group[open] > summary.group-title::before {
 }
 .b3d-hero-generators-label {
   letter-spacing: 0.14em;
-  text-transform: uppercase;
   color: var(--faint);
 }
 .b3d-hero-generators-list {
@@ -3408,7 +3398,6 @@ details.group[open] > summary.group-title::before {
   font-weight: 600;
   border-radius: var(--r-pill);
   padding: 2px 9px;
-  text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 .b3d-kcard-badge.is-live {
@@ -3693,7 +3682,6 @@ details.group[open] > summary.group-title::before {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--faint);
 }
 .lb-scope-toggle {
@@ -4456,7 +4444,6 @@ details.group[open] > summary.group-title::before {
   font-family: "IBM Plex Mono", monospace;
   font-size: 9px;
   letter-spacing: 0.03em;
-  text-transform: uppercase;
   fill: var(--muted);
 }
 .diff-line {
@@ -5027,7 +5014,6 @@ select.b3d-select {
 .b3d-share-label {
   font-size: 0.78rem;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--muted);
 }
 .b3d-share-btn {
