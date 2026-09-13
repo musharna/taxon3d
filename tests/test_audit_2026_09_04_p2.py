@@ -12,6 +12,7 @@ from app.database import SessionLocal, init_db
 from app.main import app
 from app.models import Comparison, Vote
 from tests.test_calibration_mode import _seed_calibration
+from fastapi import HTTPException
 
 
 def setup_module(_m):
@@ -36,7 +37,7 @@ def test_admin_token_compare_is_constant_time(monkeypatch):
         return real(a, b)
 
     monkeypatch.setattr(main_mod.hmac, "compare_digest", spy)
-    with pytest.raises(Exception):
+    with pytest.raises(HTTPException):
         main_mod._require_admin("wrong")
     assert seen, "_require_admin must compare with hmac.compare_digest, not !="
 
