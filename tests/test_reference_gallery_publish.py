@@ -28,6 +28,7 @@ import pytest
 
 from app import config, service
 from app.storage import LocalStorageBackend
+from scripts.export_public import ReferenceLicenseError
 
 
 def _write_gallery(root: Path, slug: str, items: list[dict]) -> None:
@@ -198,7 +199,7 @@ def test_redistribute_posture_refuses_an_unredistributable_photo(tmp_path, monke
     bundle = tmp_path / "b"
     (bundle / "assets").mkdir(parents=True)
 
-    with pytest.raises(Exception, match="(?i)licen"):
+    with pytest.raises(ReferenceLicenseError, match="(?i)licen"):
         copy_reference_gallery(bundle, "redistribute")
 
 
