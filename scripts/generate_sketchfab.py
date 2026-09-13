@@ -366,6 +366,7 @@ def main() -> int:
     import argparse
     import json
     import os
+    import shutil
     import socket
     import subprocess
     import tempfile
@@ -432,7 +433,7 @@ def main() -> int:
                 headers={"Authorization": f"Token {token}"},
             )
             url = (
-                json.loads(urllib.request.urlopen(req, timeout=30).read())
+                json.loads(urllib.request.urlopen(req, timeout=30).read())  # nosec B310 - https api.sketchfab.com endpoint
                 .get("gltf", {})
                 .get("url")
             )
@@ -440,7 +441,9 @@ def main() -> int:
                 print(f"  {asset['variant']}: no gltf download url")
                 continue
             zpath = work / f"{uid}.zip"
-            urllib.request.urlretrieve(url, zpath)
+            # urlretrieve takes no timeout; a stalled CDN would hang the batch forever
+            with urllib.request.urlopen(url, timeout=300) as r, open(zpath, "wb") as f:  # nosec B310 - download URL returned by the Sketchfab API; timeout set
+                shutil.copyfileobj(r, f)
             adir = work / uid
             with zipfile.ZipFile(zpath) as z:
                 z.extractall(adir)

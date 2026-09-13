@@ -9,7 +9,7 @@ import sys
 from mathutils import Euler
 
 argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
-OUT = argv[0] if argv else "/tmp/tomato.glb"
+OUT = argv[0] if argv else "/tmp/tomato.glb"  # nosec B108 - dev CLI default output path; argv overrides it
 SEED = int(argv[1]) if len(argv) > 1 else 0
 
 bpy.ops.wm.read_factory_settings(use_empty=True)

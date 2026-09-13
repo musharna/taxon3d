@@ -120,7 +120,7 @@ def _post_form(url: str, data: dict) -> dict:
     # urllib auto-sets this for bytes `data`, but be explicit — the siteverify
     # endpoints expect a form-encoded body.
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    with _urlreq.urlopen(_urlreq.Request(url, data=body, headers=headers), timeout=10) as r:
+    with _urlreq.urlopen(_urlreq.Request(url, data=body, headers=headers), timeout=10) as r:  # nosec B310 - url is an https siteverify constant from the provider table above
         return _json.loads(r.read().decode())
 
 

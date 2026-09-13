@@ -178,7 +178,7 @@ def apply(study_path: Path, p: dict) -> dict:
             for row in rows:
                 use = [k for k in keep if k in row]
                 con.execute(
-                    f"insert into {table} ({','.join(use)}) values ({','.join('?' for _ in use)})",
+                    f"insert into {table} ({','.join(use)}) values ({','.join('?' for _ in use)})",  # nosec B608 - table from a fixed tuple; columns from the local study DB's PRAGMA table_info; values bound via ?
                     [row[k] for k in use],
                 )
         con.commit()

@@ -671,7 +671,7 @@ def _avatar_hue(key: str) -> int:
     deterministic across requests/processes. Python's builtin `hash()` is per-process
     randomized for strings (security feature), so a stable hash (md5) substitutes for the
     literal `hash(slug) % 360` the brief describes."""
-    digest = hashlib.md5(key.encode("utf-8")).hexdigest()
+    digest = hashlib.md5(key.encode("utf-8"), usedforsecurity=False).hexdigest()
     return int(digest[:8], 16) % 360
 
 

@@ -204,7 +204,7 @@ def _ensure_commission_attempt_identity(engine) -> None:  # noqa: ANN001
 
         table.create(bind=conn)
         cols_sql = ", ".join(carried)
-        conn.exec_driver_sql(f"INSERT INTO {name} ({cols_sql}) SELECT {cols_sql} FROM {stale_name}")
+        conn.exec_driver_sql(f"INSERT INTO {name} ({cols_sql}) SELECT {cols_sql} FROM {stale_name}")  # nosec B608 - table name is a constant; column names come from the ORM table definition
         conn.exec_driver_sql(f"DROP TABLE {stale_name}")
         logger.info("rebuilt %s: identity is now (model_id, task_id, protocol)", name)
 

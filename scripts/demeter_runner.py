@@ -18,7 +18,7 @@ import torch
 demeter_dir = sys.argv[1]
 species = sys.argv[2] if len(sys.argv) > 2 else "maize"
 sample = sys.argv[3] if len(sys.argv) > 3 else "10008da"
-out = sys.argv[4] if len(sys.argv) > 4 else "/tmp/demeter.obj"
+out = sys.argv[4] if len(sys.argv) > 4 else "/tmp/demeter.obj"  # nosec B108 - dev CLI default output path; argv overrides it
 
 sys.path.insert(0, demeter_dir)
 os.chdir(demeter_dir)

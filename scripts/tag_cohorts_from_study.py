@@ -52,7 +52,8 @@ def apply_tags(study: Path, prod_copy: Path) -> dict:
     p.commit()
     q = ",".join("?" * len(tags)) or "''"
     (n_votes,) = p.execute(
-        f"SELECT count(*) FROM vote WHERE session_id IN ({q})", list(tags)
+        f"SELECT count(*) FROM vote WHERE session_id IN ({q})",  # nosec B608 - only ? placeholders are interpolated; values bound
+        list(tags),
     ).fetchone()
     p.close()
     return {

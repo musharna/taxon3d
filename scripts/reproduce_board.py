@@ -49,7 +49,7 @@ def load_preferences(path: Path) -> list[dict]:
 
 def fetch_hub(dest: Path) -> Path:
     req = urllib.request.Request(HUB_URL, headers=UA)
-    with urllib.request.urlopen(req, timeout=120) as r, open(dest, "wb") as f:
+    with urllib.request.urlopen(req, timeout=120) as r, open(dest, "wb") as f:  # nosec B310 - HUB_URL constant
         f.write(r.read())
     return dest
 
@@ -100,7 +100,7 @@ def compare(rows: list[dict], api_url: str) -> dict:
     """Per-slug score deltas against a live `/api/leaderboard` response, and the count of slugs
     whose live rank neighbours agree with ours. Boards differ only by bootstrap noise and by
     votes cast since the dataset was published; both show up here as small deltas."""
-    with urllib.request.urlopen(urllib.request.Request(api_url, headers=UA), timeout=60) as r:
+    with urllib.request.urlopen(urllib.request.Request(api_url, headers=UA), timeout=60) as r:  # nosec B310 - operator's --compare API URL
         live = json.load(r)
     live_by = {row["slug"]: row for row in live.get("rows", [])}
     deltas = {

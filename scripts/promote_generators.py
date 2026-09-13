@@ -95,7 +95,7 @@ def promote(source: str, target: str, slugs: list[str], *, apply: bool = False) 
     try:
         # --- resolve the generators in the source
         qs = ",".join("?" * len(slugs))
-        gens = src.execute(f"SELECT * FROM generator WHERE slug IN ({qs})", slugs).fetchall()
+        gens = src.execute(f"SELECT * FROM generator WHERE slug IN ({qs})", slugs).fetchall()  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
         found = {g["slug"] for g in gens}
         if missing := set(slugs) - found:
             raise PromoteError(f"generator(s) not found in source: {sorted(missing)}")
@@ -103,20 +103,22 @@ def promote(source: str, target: str, slugs: list[str], *, apply: bool = False) 
         gen_ids = [g["id"] for g in gens]
         gq = ",".join("?" * len(gen_ids))
         outs = src.execute(
-            f"SELECT * FROM model_output WHERE generator_id IN ({gq})", gen_ids
+            f"SELECT * FROM model_output WHERE generator_id IN ({gq})",  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
+            gen_ids,
         ).fetchall()
         out_ids = [o["id"] for o in outs]
 
         # --- already promoted? (idempotent re-run)
         have_gen = {
-            r[0] for r in dst.execute(f"SELECT slug FROM generator WHERE slug IN ({qs})", slugs)
+            r[0]
+            for r in dst.execute(f"SELECT slug FROM generator WHERE slug IN ({qs})", slugs)  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
         }
         have_out = set()
         if out_ids:
             oq = ",".join("?" * len(out_ids))
             have_out = {
                 r[0]
-                for r in dst.execute(f"SELECT id FROM model_output WHERE id IN ({oq})", out_ids)
+                for r in dst.execute(f"SELECT id FROM model_output WHERE id IN ({oq})", out_ids)  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
             }
 
         # --- an id already used by a DIFFERENT row in the target is a collision, not a re-run
@@ -141,7 +143,8 @@ def promote(source: str, target: str, slugs: list[str], *, apply: bool = False) 
         if task_ids:
             tq = ",".join("?" * len(task_ids))
             present = {
-                r[0] for r in dst.execute(f"SELECT id FROM task WHERE id IN ({tq})", list(task_ids))
+                r[0]
+                for r in dst.execute(f"SELECT id FROM task WHERE id IN ({tq})", list(task_ids))  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
             }
             if orphan := task_ids - present:
                 raise PromoteError(
@@ -162,7 +165,8 @@ def promote(source: str, target: str, slugs: list[str], *, apply: bool = False) 
             for t in unclassified:
                 oq = ",".join("?" * len(out_ids))
                 n = src.execute(
-                    f"SELECT COUNT(*) FROM {t} WHERE output_id IN ({oq})", out_ids
+                    f"SELECT COUNT(*) FROM {t} WHERE output_id IN ({oq})",  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
+                    out_ids,
                 ).fetchone()[0]
                 if n:
                     raise PromoteError(
@@ -207,16 +211,17 @@ def promote(source: str, target: str, slugs: list[str], *, apply: bool = False) 
                 continue
             oq = ",".join("?" * len(promoted_ids))
             summary[t] = src.execute(
-                f"SELECT COUNT(*) FROM {t} WHERE output_id IN ({oq})", promoted_ids
+                f"SELECT COUNT(*) FROM {t} WHERE output_id IN ({oq})",  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
+                promoted_ids,
             ).fetchone()[0]
 
         for t in GENERATOR_EVIDENCE_TABLES:
             if t not in {r[0] for r in src.execute("SELECT name FROM sqlite_master")}:
                 continue
-            have_ids = {r[0] for r in dst.execute(f"SELECT id FROM {t}")}
+            have_ids = {r[0] for r in dst.execute(f"SELECT id FROM {t}")}  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
             summary[t] = sum(
                 1
-                for r in src.execute(f"SELECT id FROM {t} WHERE generator_id IN ({gq})", gen_ids)
+                for r in src.execute(f"SELECT id FROM {t} WHERE generator_id IN ({gq})", gen_ids)  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
                 if r[0] not in have_ids
             )
 
@@ -228,26 +233,26 @@ def promote(source: str, target: str, slugs: list[str], *, apply: bool = False) 
             cols = [c for c in g.keys() if c in _cols(dst, "generator")]
             vals = [resolved_paradigm[g["id"]] if c == "paradigm" else g[c] for c in cols]
             dst.execute(
-                f"INSERT INTO generator ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
+                f"INSERT INTO generator ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
                 vals,
             )
         for o in new_outs:
             cols = [c for c in o.keys() if c in _cols(dst, "model_output")]
             vals = [0 if c == "n_comparisons" else o[c] for c in cols]  # rule 2: reset the counter
             dst.execute(
-                f"INSERT INTO model_output ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
+                f"INSERT INTO model_output ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
                 vals,
             )
         for t in EVIDENCE_TABLES:
             if not summary.get(t):
                 continue
             oq = ",".join("?" * len(promoted_ids))
-            rows = src.execute(f"SELECT * FROM {t} WHERE output_id IN ({oq})", promoted_ids)
+            rows = src.execute(f"SELECT * FROM {t} WHERE output_id IN ({oq})", promoted_ids)  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
             dst_cols = _cols(dst, t)
             for r in rows:
                 cols = [c for c in r.keys() if c in dst_cols and c != "id"]
                 dst.execute(
-                    f"INSERT INTO {t} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
+                    f"INSERT INTO {t} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
                     [r[c] for c in cols],
                 )
 
@@ -257,9 +262,10 @@ def promote(source: str, target: str, slugs: list[str], *, apply: bool = False) 
         for t in GENERATOR_EVIDENCE_TABLES:
             if t not in {r[0] for r in src.execute("SELECT name FROM sqlite_master")}:
                 continue
-            have_ids = {r[0] for r in dst.execute(f"SELECT id FROM {t}")}
+            have_ids = {r[0] for r in dst.execute(f"SELECT id FROM {t}")}  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
             rows = src.execute(
-                f"SELECT * FROM {t} WHERE generator_id IN ({gq})", gen_ids
+                f"SELECT * FROM {t} WHERE generator_id IN ({gq})",  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
+                gen_ids,
             ).fetchall()
             dst_cols = _cols(dst, t)
             n = 0
@@ -268,7 +274,7 @@ def promote(source: str, target: str, slugs: list[str], *, apply: bool = False) 
                     continue
                 cols = [c for c in r.keys() if c in dst_cols]
                 dst.execute(
-                    f"INSERT INTO {t} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
+                    f"INSERT INTO {t} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",  # nosec B608 - table/column names are module constants or read from the DB's own sqlite catalog; values bound via ?
                     [r[c] for c in cols],
                 )
                 n += 1

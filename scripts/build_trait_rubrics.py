@@ -76,7 +76,7 @@ _UA = "bio3d-arena-rubrics/0.1 (research; contact: operator)"
 
 def _http_json(url: str, timeout: int = 40) -> dict:
     req = _urlrequest.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
-    with _urlrequest.urlopen(req, timeout=timeout) as r:  # noqa: S310 — fixed https hosts
+    with _urlrequest.urlopen(req, timeout=timeout) as r:  # noqa: S310 — fixed https hosts  # nosec B310 - callers build https Wikidata / Europe PMC URLs
         return _json.loads(r.read().decode())
 
 
@@ -192,9 +192,12 @@ def _ghostcite_verify(citation: str) -> dict:
 
 
 def _resolve_url(url: str, timeout: int = 20) -> bool:
+    # citation URLs are data: never let file:// or a custom scheme reach urlopen
+    if _urlparse.urlsplit(url).scheme not in ("http", "https"):
+        return False
     try:
         req = _urlrequest.Request(url, method="HEAD", headers={"User-Agent": _UA})
-        with _urlrequest.urlopen(req, timeout=timeout) as r:  # noqa: S310
+        with _urlrequest.urlopen(req, timeout=timeout) as r:  # noqa: S310  # nosec B310 - scheme restricted to http(s) above; HEAD probe
             return 200 <= r.status < 400
     except Exception:  # noqa: BLE001
         return False

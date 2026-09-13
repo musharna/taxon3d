@@ -47,13 +47,13 @@ def authorize_url(state: str, redirect_uri: str) -> str:
 def _post_form(url: str, data: dict) -> dict:
     body = _url.urlencode(data).encode()
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    with _req.urlopen(_req.Request(url, data=body, headers=headers), timeout=10) as r:
+    with _req.urlopen(_req.Request(url, data=body, headers=headers), timeout=10) as r:  # nosec B310 - url is one of the https huggingface.co OAuth constants above
         return _json.loads(r.read().decode())
 
 
 def _get_json(url: str, access_token: str) -> dict:
     headers = {"Authorization": f"Bearer {access_token}"}
-    with _req.urlopen(_req.Request(url, headers=headers), timeout=10) as r:
+    with _req.urlopen(_req.Request(url, headers=headers), timeout=10) as r:  # nosec B310 - url is one of the https huggingface.co OAuth constants above
         return _json.loads(r.read().decode())
 
 

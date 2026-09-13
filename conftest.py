@@ -18,7 +18,7 @@ def _is_safe_test_db_target(value: str | None) -> bool:
     if not value:
         return True
     low = value.lower()
-    if any(marker in low for marker in (":memory:", "/tmp/", "bio3d_test_")):
+    if any(marker in low for marker in (":memory:", "/tmp/", "bio3d_test_")):  # nosec B108 - '/tmp/' is a substring the safe-target check matches, not a path written to
         return True
     # "test"/"tests" only as a whole path or filename token (bounded by / _ - . or a string
     # end): `./test.db`, `tests/`, `test_arena.db` pass; `latest/` and `contest/` do not.

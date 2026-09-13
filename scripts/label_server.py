@@ -152,7 +152,7 @@ def build_app(rows, store, store_csv):
     out2sheet = {r["output_id"]: r["contact_sheet"] for r in rows}
     key2row = {(r["output_id"], r["trait_key"]): r for r in rows}
     VERSION = hashlib.sha1(
-        "|".join(f"{r['output_id']}:{r['trait_key']}" for r in rows).encode()
+        "|".join(f"{r['output_id']}:{r['trait_key']}" for r in rows).encode(), usedforsecurity=False
     ).hexdigest()[:12]
 
     def _row_payload(i):
