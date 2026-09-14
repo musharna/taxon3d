@@ -20,4 +20,7 @@ source_paths = ["app"]
 also_copy = [".dockerignore", ".github", ".gitignore", ".pre-commit-config.yaml", ".prettierignore", "CHANGELOG.md", "CITATION.cff", "Dockerfile", "LICENSE", "README.md", "blender", "conftest.py", "deploy", "docs", "fly.toml", "helios", "lpy", "requirements-dev.txt", "requirements-research.txt", "requirements-scale.txt", "requirements.txt", "scripts"]
 # test_runtime_deps inspects app imports against the requirements files, and mutation adds imports of its own
 # the *_crops_wired tests treat an existing data/assets dir as the runtime volume, but the app creates that dir under cwd at import, which under mutmut is mutants/
-pytest_add_cli_args = ["--deselect", "tests/test_runtime_deps.py::test_every_top_level_app_import_is_installable_from_the_runtime_files", "-k", "not crops_wired"]
+pytest_add_cli_args = ["--deselect", "tests/test_runtime_deps.py::test_every_top_level_app_import_is_installable_from_the_runtime_files", "-k", "not crops_wired",
+    # live browser render: _has_browser() accepts the chromium-browser STUB on the CI runner, then imports playwright, which is not installed (issue filed)
+    "--ignore=tests/test_judge_capture_live.py",
+]
