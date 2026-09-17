@@ -8,6 +8,19 @@ design spec (internal).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`tests/test_seed_entrypoint_is_not_destructive.py` seeded the checkout.** Its
+  subprocess popped `BIO3D_DATA_DIR`, so `python -m app.seed --force` (cwd = repo)
+  wrote 19 GLBs into the real `data/assets`. Every later test then saw a
+  "present" runtime volume, and a second run in the same checkout failed the
+  four `*_crops_wired` tests and the live multi4 render. Found by the new
+  `Tests with no network` CI step, which is the second run. The subprocess now
+  gets an isolated data dir (the explicit `BIO3D_DATABASE_URL` already wins
+  over the derived `DB_PATH`), and a test asserts nothing under the checkout's
+  `data/assets` is written during a seed run, with the isolated dir receiving
+  the GLBs as its positive control.
+
 ## [0.2.0] - 2026-09-06
 
 Everything since the first tagged release: 90 commits. The public instance ran most of it for
