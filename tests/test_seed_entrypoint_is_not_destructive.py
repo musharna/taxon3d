@@ -32,18 +32,28 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def _run_module(
-    *args: str, env_extra: dict | None = None, db_url: str
+    *args: str, env_extra: dict | None = None, db_url: str, data_dir: Path | None = None
 ) -> subprocess.CompletedProcess:
     import os
+    import tempfile
 
+    if data_dir is None:
+        data_dir = Path(tempfile.mkdtemp(prefix="bio3d_test_seed_"))
     env = {
         **os.environ,
         "BIO3D_DATABASE_URL": db_url,
         "BIO3D_ADMIN_TOKEN": "test-token",
+        # The seed writes GLBs under DATA_DIR/assets. This used to POP the
+        # variable (to keep DB_PATH from being derived beside the explicit URL),
+        # which sent the subprocess, cwd=REPO, to the checkout's own data/assets:
+        # every later test then saw a "present" runtime volume, and a second run
+        # in the same checkout failed the *_crops_wired tests. An explicit
+        # BIO3D_DATABASE_URL already wins over the derived DB_PATH, so isolating
+        # the data dir costs nothing.
+        "BIO3D_DATA_DIR": str(data_dir),
         **(env_extra or {}),
     }
     env.pop("BIO3D_DB_PATH", None)
-    env.pop("BIO3D_DATA_DIR", None)  # would otherwise re-derive DB_PATH beside the URL
     return subprocess.run(
         [sys.executable, "-m", "app.seed", *args],
         cwd=str(REPO),
@@ -117,3 +127,30 @@ def test_container_boot_does_not_invoke_the_seeder():
         "the container boot command must not run the seeder — the public DB is imported, "
         f"not seeded. Got: {cmd_lines}"
     )
+
+
+def test_module_run_writes_assets_into_its_data_dir_not_the_checkout(tmp_path):
+    """The seed must land in the DATA_DIR the test hands it, never in the checkout.
+
+    Negative: no file under the checkout's data/assets is written during the
+    run (mtime check, so it holds even when a developer's real volume is
+    present, and even when an earlier test already left the same names behind).
+    Positive control: the isolated data dir does receive the seed GLBs.
+    """
+    import time
+
+    checkout_assets = REPO / "data" / "assets"
+    start = time.time() - 1.0  # filesystem mtime granularity
+    data_dir = tmp_path / "data"
+    proc = _run_module("--force", db_url=f"sqlite:///{tmp_path / 'bio3d_test_seed.db'}", data_dir=data_dir)
+    assert proc.returncode == 0, proc.stderr[-800:]
+
+    written = sorted(
+        str(p.relative_to(checkout_assets))
+        for p in checkout_assets.rglob("*")
+        if p.is_file() and p.stat().st_mtime >= start
+    ) if checkout_assets.exists() else []
+    assert written == [], f"seed wrote into the checkout's data/assets: {written[:5]}"
+
+    seeded = sorted(p.name for p in (data_dir / "assets").rglob("*.glb"))
+    assert seeded, "the isolated DATA_DIR received no seed GLBs; the seed went somewhere else"
