@@ -142,14 +142,20 @@ def test_module_run_writes_assets_into_its_data_dir_not_the_checkout(tmp_path):
     checkout_assets = REPO / "data" / "assets"
     start = time.time() - 1.0  # filesystem mtime granularity
     data_dir = tmp_path / "data"
-    proc = _run_module("--force", db_url=f"sqlite:///{tmp_path / 'bio3d_test_seed.db'}", data_dir=data_dir)
+    proc = _run_module(
+        "--force", db_url=f"sqlite:///{tmp_path / 'bio3d_test_seed.db'}", data_dir=data_dir
+    )
     assert proc.returncode == 0, proc.stderr[-800:]
 
-    written = sorted(
-        str(p.relative_to(checkout_assets))
-        for p in checkout_assets.rglob("*")
-        if p.is_file() and p.stat().st_mtime >= start
-    ) if checkout_assets.exists() else []
+    written = (
+        sorted(
+            str(p.relative_to(checkout_assets))
+            for p in checkout_assets.rglob("*")
+            if p.is_file() and p.stat().st_mtime >= start
+        )
+        if checkout_assets.exists()
+        else []
+    )
     assert written == [], f"seed wrote into the checkout's data/assets: {written[:5]}"
 
     seeded = sorted(p.name for p in (data_dir / "assets").rglob("*.glb"))
