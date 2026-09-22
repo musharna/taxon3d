@@ -24,6 +24,7 @@ from app import admissibility  # noqa: E402
 from app import config  # noqa: E402
 from app import public_export  # noqa: E402
 from app import service  # noqa: E402
+from app import topology  # noqa: E402
 from app.dataset import voter_pseudonym  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.kingdoms import KINGDOM_OF  # noqa: E402
@@ -447,6 +448,73 @@ def _asset_root() -> Path:
     return Path(config.ASSET_DIR)
 
 
+def attach_topology(db: Session, outputs: list[dict]) -> list[dict]:
+    """Add surface-topology columns to each `outputs` row, read from the ORIGINAL mesh.
+
+    Kept out of `build_tables` because that function is pure DB and these values only exist in the
+    asset bytes. Requested by a downstream user who needs to select open-surface meshes: the corpus
+    repairs nothing, so whether a leaf is a single open sheet or a thin closed solid depends on the
+    generator, and until now the only way to find out was to download all 292 meshes and recompute.
+
+    A mesh whose topology cannot be read still ships — `topology_note` carries the reason, so the
+    row says why the columns are null instead of quietly omitting the asset from the dataset.
+    """
+    root = _asset_root()
+    for row in outputs:
+        o = db.get(ModelOutput, row["output_id"])
+        src = root / o.asset_path
+        row.update(
+            topology.mesh_topology(str(src))
+            if src.exists()
+            else {**dict.fromkeys(topology.FIELDS), "topology_note": "asset_unavailable"}
+        )
+    return outputs
+
+
+def _plural(n: int, singular: str, plural: str) -> str:
+    return f"{n} {singular if n == 1 else plural}"
+
+
+def _topology_summary(outputs: list[dict]) -> str:
+    """One paragraph of live topology counts for the card.
+
+    Computed, never hardcoded, for the reason `write_cards` already states: a frozen count becomes
+    a lie at the next export. Reports `open_edge_fraction == 0` as the open-vs-closed answer and
+    `watertight` only as the stricter secondary — `is_watertight` also fails on non-manifold edges
+    and winding, so quoting it alone overstates how open the meshes are.
+    """
+    measured = [r for r in outputs if r.get("open_edge_fraction") is not None]
+    if not measured:
+        return "Topology could not be measured for any mesh in this release."
+
+    n = len(measured)
+    closed = [r for r in measured if r["open_edge_fraction"] == 0.0]
+    watertight = [r for r in measured if r.get("watertight")]
+    parts = [
+        f"In this release **{len(closed)} of {n} meshes ({len(closed) / n:.0%}) have no open "
+        f"edges at all**."
+    ]
+
+    by_kingdom = {}
+    for r in measured:
+        by_kingdom.setdefault(r.get("kingdom") or "unknown", []).append(r)
+    if len(by_kingdom) > 1:
+        bits = ", ".join(
+            f"{k} {sum(1 for r in rows if r['open_edge_fraction'] == 0.0) / len(rows):.0%} "
+            f"({sum(1 for r in rows if r['open_edge_fraction'] > 0.05)} of {len(rows)} above 5% open)"
+            for k, rows in sorted(by_kingdom.items(), key=lambda kv: -len(kv[1]))
+        )
+        parts.append(f"Closed-surface share by kingdom: {bits}.")
+
+    parts.append(
+        f"Only {len(watertight)} ({len(watertight) / n:.0%}) are `watertight`, which is stricter: "
+        f"{_plural(len(closed) - len(watertight), 'mesh has', 'meshes have')} no boundary yet "
+        "fail on non-manifold edges or inconsistent winding. For the open-vs-closed question use "
+        "`open_edge_fraction`; check both before simulating."
+    )
+    return " ".join(parts)
+
+
 _CARD = """---
 license: cc-by-4.0
 task_categories:
@@ -482,10 +550,31 @@ Live arena: https://taxon3d.org
 | `meshes/<output_id>.glb` | {n_meshes} | Original, uncompressed meshes |
 | `admissibility.jsonl` | {n_admissibility} | **The headline.** One row per (output, predicate) |
 | `completeness.jsonl` | {n_completeness} | Per-organ checklist behind the completeness predicate |
-| `outputs.jsonl` | {n_outputs} | Taxon, kingdom, paradigm, generator, licence, attribution |
+| `outputs.jsonl` | {n_outputs} | Taxon, kingdom, paradigm, generator, licence, attribution, **surface topology** |
 | `votes.jsonl` | {n_votes} | Resolved human pairwise comparisons where BOTH meshes ship |
 | `preferences.jsonl` | {n_preferences} | **Every vote the leaderboard counts**, by metadata; withheld sides flagged via `a_mesh_available` / `b_mesh_available` |
 | `judge_ratings.jsonl` | {n_judge_ratings} | VLM-judge Bradley-Terry ratings per generator |
+
+## Surface topology: open sheets vs closed solids
+
+Nothing in this corpus is hole-filled, welded or repaired — each mesh is exactly what its
+generator emitted. So whether a leaf arrives as a single **open sheet** or as a thin **closed
+solid** is a property of the generator, not of us, and it changes what the asset is usable for:
+per-side optical properties, shell elements, leaf area, and two-sided BSDFs all behave differently
+on the two. Rather than make you download every mesh to find out, `outputs.jsonl` carries it:
+
+| column | meaning |
+| --- | --- |
+| `watertight` | trimesh's `is_watertight`: every edge used by exactly two consistently-wound faces |
+| `open_edge_fraction` | fraction of unique edges used by exactly one face — 0.0 means no boundary at all |
+| `boundary_loop_count` | number of distinct boundary loops, i.e. holes (pinched boundaries counted separately) |
+| `topology_note` | `null` when measured; otherwise why not (`point_cloud`, `unreadable: ...`) |
+
+Measured on the published mesh bytes in `meshes/`, with vertices merged **by position only** —
+glTF splits vertices at every UV and normal seam, and a texture seam is not a hole. These columns
+are descriptive: nothing here gates admission and no mesh was modified.
+
+{topology_summary}
 
 ## What is NOT here, and why
 
@@ -623,6 +712,7 @@ def write_cards(
             n_preferences=len(tables["preferences"]),
             n_judge_ratings=len(tables["judge_ratings"]),
             withheld_summary=_withheld_summary(accounting),
+            topology_summary=_topology_summary(tables["outputs"]),
         ),
         encoding="utf-8",
     )
@@ -677,6 +767,7 @@ def export_hf(
     if not inc.output_ids:
         raise RuntimeError("include set is empty — refusing to write an empty dataset")
     tables = build_tables(db, inc)
+    attach_topology(db, tables["outputs"])
     # A per-item licence histogram, because the card's blanket `license: cc-by-4.0` is a claim
     # about the collection and NOT about every row in it: REDISTRIBUTABLE_LICENSES also admits
     # CC-BY-SA-3.0/4.0 and ODbL-1.0, whose share-alike terms are not "narrower than CC-BY" the way
