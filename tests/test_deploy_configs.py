@@ -3,6 +3,8 @@ Parse them and pin the load-bearing values."""
 
 from __future__ import annotations
 
+import re
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -28,7 +30,18 @@ def test_backup_workflow_is_scheduled_and_never_prints_secrets():
         assert f"secrets.{secret}" in text
     # no step echoes its environment
     assert not any("env" in (st.get("run") or "").split() for st in steps)
-    # the boto3 pin matches the scale requirements, so CI and the image agree on the client
+    # the backup job installs the scale requirements' boto3 pin, so CI and the image agree on the
+    # client. It must READ the pin (a copied literal drifted on a Dependabot bump, PR #211), so
+    # run the install step's own command with pip swapped for printf and compare.
     scale = (ROOT / "requirements-scale.txt").read_text()
     pin = [ln for ln in scale.splitlines() if ln.startswith("boto3==")][0].split()[0]
-    assert pin in text, pin
+    assert not re.search(r"boto3==\d", text), "backup.yml hard-codes a boto3 pin"
+    (install,) = [st["run"] for st in steps if (st.get("run") or "").startswith("pip install")]
+    resolved = subprocess.run(
+        ["bash", "-c", install.replace("pip install", "printf %s", 1)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert resolved == pin, (resolved, pin)
