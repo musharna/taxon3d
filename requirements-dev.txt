@@ -5,10 +5,10 @@
 
 pytest==9.1.1
 httpx==0.28.1
-ruff==0.15.15  # lint + format; MUST match .github/workflows/ci.yml (lint job installs ruff alone).
-               # 0.16.x adds ~770 findings + reformats 21 files against this tree; upgrade both
-               # pins together. Pinned because an unpinned formatter rewrites files differently
-               # per machine, and `ruff format` is run against this tree by hand
+ruff==0.16.7  # lint + format; MUST match .github/workflows/ci.yml (lint job installs ruff alone)
+               # and the ruff-pre-commit rev. Pinned because an unpinned formatter rewrites files
+               # differently per machine, and `ruff format` is run against this tree by hand.
+               # The rule set is pinned in pyproject.toml, not inherited from ruff's default.
 PyYAML==6.0.3  # test-only: tests/test_export_hf_dataset.py parses the HF dataset card's YAML
                # front matter for real, so a card that Hugging Face would render as raw text
                # fails CI instead of failing on the hub. Present transitively today; declared

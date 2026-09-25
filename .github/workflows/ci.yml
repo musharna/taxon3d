@@ -38,9 +38,11 @@ jobs:
       - name: Install lint tooling only
         # Not requirements-dev.txt: that layers on requirements-research.txt, which pulls
         # torch and the NVIDIA CUDA stack (multiple GB) for a job that only runs ruff.
-        run: pip install "ruff==0.15.15"
+        run: pip install "ruff==0.16.7"
       - run: ruff check .
-      - run: ruff format --check .
+      # *.md excluded: 0.16 formats fenced code in Markdown; the pre-commit hook and the
+      # guardrails format gate format Python only, so this matches what local writes.
+      - run: ruff format --check . --exclude '*.md'
 
   test:
     runs-on: ubuntu-latest

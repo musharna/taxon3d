@@ -15,6 +15,12 @@ testpaths = ["tests"]
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.lint]
+# ruff 0.16 grew its DEFAULT rule set from 59 rules to 413; this tree relied on the
+# default, so the upgrade alone produced ~800 findings from rules nobody chose. Pin
+# the pre-0.16 default explicitly: adopting more rules is a decision, not a bump.
+select = ["E4", "E7", "E9", "F"]
+
 [tool.mutmut]
 source_paths = ["app"]
 also_copy = [".dockerignore", ".github", ".gitignore", ".pre-commit-config.yaml", ".prettierignore", "CHANGELOG.md", "CITATION.cff", "Dockerfile", "LICENSE", "README.md", "blender", "conftest.py", "deploy", "docs", "fly.toml", "helios", "lpy", "requirements-dev.txt", "requirements-research.txt", "requirements-scale.txt", "requirements.txt", "scripts"]
