@@ -18,8 +18,11 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/arena-dark.png">
-  <img alt="The arena: a single-image 3D reconstruction task, reference photographs of the real organism, and anonymised 3D models shown side by side for comparison" src="docs/images/arena-light.png">
+  <img alt="The arena: a single-image 3D reconstruction task for Arabidopsis thaliana, a strip of reference photographs of the real plant, and four anonymised 3D models in a two-by-two grid" src="docs/images/arena-light.png">
 </picture>
+
+<sub>Screenshot taken 2026-08-03, before the rename, so it shows the old "Bio 3D" branding and
+that day's counts; it has not been re-shot.</sub>
 
 A [Chatbot-Arena](https://lmarena.ai/)-style platform for **blind comparison of
 generative 3D models — of living organisms**. You get a biological task and two
@@ -39,32 +42,38 @@ fidelity, not taste.
 |               |                                                                                                           |
 | ------------- | --------------------------------------------------------------------------------------------------------- |
 | **Tasks**     | 20 active, spanning plants, fungi and animals                                                             |
-| **Outputs**   | 488 votable 3D models across 52 entrants                                                                  |
+| **Outputs**   | 488 visible outputs from 52 generators (prod snapshot, 2026-09-06)                                        |
 | **Paradigms** | single-image reconstruction · text→3D · LLM-authored procedural geometry · agentic render→critique→revise |
 | **Ranking**   | Bradley–Terry (MM) with bootstrap 95% CIs, CI-grouped ranks                                               |
 
-Counts are measured from the live board by `scripts/readme_stats.py` into
-`docs/stats/readme.json`, and a test holds this table to that file.
+Counts come from `scripts/readme_stats.py`, run against a snapshot of the production database
+taken 2026-09-06, and are stored in `docs/stats/readme.json`; a test holds this table to that
+file. "Visible outputs" counts every output that is neither hidden nor a gold attention check,
+which is not the same as the set the arena currently serves for voting.
 
 > [!NOTE]
-> **Live, and honest about what it cannot yet separate.** Ranks are grouped by
-> confidence interval, so generators the votes cannot tell apart share a rank rather
-> than being ordered by noise. Each board states on its face how many further votes
-> would firm its next model — at the time of writing, under twenty per board. That
-> number is the honest reason to **[try it](https://taxon3d.org/arena)**.
+> **Maintenance mode since 2026-09-24.** Active development has stopped; the arena stays up
+> and keeps collecting votes until a review on 2027-03-24 — see [docs/SUNSET.md](docs/SUNSET.md).
+> Ranks are grouped by confidence interval, so generators the votes cannot tell apart share a
+> rank rather than being ordered by noise. Each board states on its face how many further votes
+> would firm its next model; on 2026-08-04 that was under twenty per board. You can still
+> **[vote](https://taxon3d.org/arena)**.
 
 ## How it works
 
 1. **Inspect** — two outputs for the same organism, orbit/zoom each. Generator
-   identity is never sent to the browser during voting.
+   identity is not shown to voters.
 2. **Compare** — reference photographs of the real organism sit above the pair, so
    fidelity is judged against the subject rather than against the other model.
 3. **Vote** — A, B, tie, or both-bad (`←` `→` `t` `x`).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/leaderboard-dark.png">
-  <img alt="The leaderboard, showing Bradley–Terry scores with confidence-interval whiskers" src="docs/images/leaderboard-light.png">
+  <img alt="The leaderboard hub: one card per generation method (image-to-3D, LLM procedural, text-to-3D, agentic), each listing its top three models with Bradley–Terry scores and how many of its models are firm" src="docs/images/leaderboard-light.png">
 </picture>
+
+<sub>Screenshot taken 2026-08-03 (old "Bio 3D" branding, 337 votes at the time). This is the hub
+page; the confidence-interval whiskers are on each method's own board.</sub>
 
 ### What keeps the numbers honest
 
@@ -72,8 +81,9 @@ Counts are measured from the live board by `scripts/readme_stats.py` into
   intervals overlap share a rank, so statistical ties read as ties.
 - **Pairwise significance** via paired bootstrap: P(A ranks above B), and whether a
   model actually beats the next rank down.
-- **Bias audit** — left-win-rate, tie/both-bad rate, and cross-format confounds are
-  measured and published rather than assumed away.
+- **Bias audit** — left-win-rate, tie/both-bad rate, and cross-format confounds.
+- Both are computed on an internal instance only. They are not published on taxon3d.org:
+  the public deploy returns 404 for `/significance`, `/api/significance` and `/api/bias`.
 - **Vote integrity** — gold-standard attention checks score voter trust, low-trust
   sessions are excluded from the fit, plus rate limiting, per-session dedup, and an
   optional captcha.
@@ -85,10 +95,8 @@ Counts are measured from the live board by `scripts/readme_stats.py` into
 
 ### Also in the box
 
-- **A format-keyed viewer registry**, not just meshes — `<model-viewer>` for
-  GLB/GLTF, **3Dmol.js** for PDB/mmCIF structures and SDF/MOL connection tables.
-  That last one matters: SDF preserves bond orders and stereochemistry, so docking
-  poses, conformer sets and SBDD outputs are first-class rather than flattened.
+- **A format-keyed viewer registry** (side feature) — `<model-viewer>` for GLB/GLTF,
+  **3Dmol.js** for PDB/mmCIF and SDF/MOL. See [Other 3D formats](#other-3d-formats).
 - **Reference galleries are quality-gated, not just correctly labelled.** Sourcing
   on taxonomic correctness alone let through a heron holding a goldfish — a valid
   _Carassius auratus_ record and a useless reference — and dingoes standing in for
@@ -102,24 +110,35 @@ Counts are measured from the live board by `scripts/readme_stats.py` into
 Single FastAPI app, server-rendered (Jinja2) + vanilla JS, SQLAlchemy over SQLite
 (dev and deployed; Postgres is supported but no longer used), 3D rendered client-side.
 One Docker container; asset blobs on local disk or S3-compatible object storage. The
-live instance runs on Fly.io with a SQLite file on a Fly volume (it ran on Neon Postgres
-until 2026-08-09, when metered egress took the site down), Cloudflare R2 for assets and
+live instance runs on Fly.io with a SQLite file on a Fly volume, Cloudflare R2 for assets and
 Cloudflare in front for edge caching — see [`deploy/README.md`](deploy/README.md) and
 [`docs/cloudflare-runbook.md`](docs/cloudflare-runbook.md).
 
 ```
 app/
-  main.py        FastAPI routes (arena, voting, leaderboard, tasks, admin)
-  models.py      SQLAlchemy data model
-  ranking.py     Elo + Bradley–Terry (+ bootstrap CIs)   [pure functions]
-  matchmaking.py pair / task selection (under-sampled bias)
-  service.py     apply-vote (Elo) + recompute-leaderboard (BT)
-  assets_gen.py  procedural GLB generation (trimesh) for demo data
-  seed.py        demo categories/criteria/generators/tasks/outputs
-  templates/     Jinja2 pages
-  static/        style.css + arena.js
-data/            SQLite DB + asset blobs (gitignored; regenerated by seed)
-tests/           pytest: ranking + end-to-end API
+  main.py          app setup + public pages (home, leaderboard, models, organisms,
+                   dataset, static pages, OG images, auth, health)
+  routes/
+    vote.py        /arena, /study, ballot + vote APIs, opaque /media/o asset routes
+    admin.py       /admin routes and the admin token checks
+    research.py    research JSON (internal-only), recon benchmark, ingestion API,
+                   submission queue
+  web_common.py    helpers shared by main.py and the routers
+  config.py        settings read from the environment
+  models.py        SQLAlchemy data model
+  ranking.py       Elo + Bradley–Terry (+ bootstrap CIs)   [pure functions]
+  matchmaking.py   pair / task selection (prefers under-sampled outputs)
+  service.py       apply-vote (Elo), recompute-leaderboard (BT), significance, bias
+  licensing.py     REDISTRIBUTABLE_LICENSES
+  public_export.py display / redistribute export postures
+  seed.py          demo categories/criteria/generators/tasks/outputs
+  assets_gen.py    procedural GLB generation (trimesh) for demo data
+  …                ~70 more modules: corpus building, scoring, reference sourcing
+  templates/       Jinja2 pages
+  static/          CSS + JS (arena.js, leaderboard.js, viewer.js, …)
+scripts/           corpus, harvest, stats and maintenance scripts
+data/              SQLite DB + asset blobs (gitignored; regenerated by seed)
+tests/             pytest
 ```
 
 ## Data model
@@ -133,8 +152,8 @@ criteria are added by inserting rows — no schema change.
 ## Ranking methodology
 
 - **Elo** updates on every vote (K=32, ties = 0.5) for instant feedback.
-- **Bradley–Terry** is fit by MM iteration over the full decisive-vote record and
-  rescaled to an Elo-like range; **bootstrap resampling** yields 95% CIs so
+- **Bradley–Terry** is fit by MM iteration over the decisive votes plus ties, each tie
+  counted as one win in each direction (both-bad votes are left out), and rescaled to an Elo-like range; **bootstrap resampling** yields 95% CIs so
   generators are ranked with uncertainty. Recompute from Admin (or `POST
 /admin/recompute`). Light symmetric regularization keeps the MLE finite when a
   generator has only wins or only losses.
@@ -161,8 +180,10 @@ Dependencies are layered, each file including the one above it:
 | `requirements-dev.txt`      | + pytest, httpx, ruff                                             | contributing                   |
 
 The split is load-bearing, not cosmetic: `open_clip_torch` pulls `torch` and the full NVIDIA CUDA
-stack, so a runtime-only install is **173 MB against 5.6 GB**. `tests/test_runtime_deps.py`
-enforces it.
+stack. Measured once on a clean venv on 2026-07-23 (not re-run since), a runtime-only install was
+173 MB against 5.6 GB for the full one. `tests/test_runtime_deps.py` enforces the split, not the
+sizes: it fails if serving the public app imports the research stack, or if an app import is
+missing from the runtime requirements.
 
 Open <http://127.0.0.1:8000> to vote, `/leaderboard` for rankings, `/tasks` to
 browse benchmark tasks, `/admin` for admin tools (token below).
@@ -256,52 +277,21 @@ there rather than at `flyctl deploy`.
 pytest -q        # ranking, vote integrity, licensing gates, scale-out seams (~2,000 tests)
 ```
 
-## Supported 3D formats
+## Other 3D formats
 
-| Format      | Viewer           | Notes                                                                                                                                                                                          |
-| ----------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GLB / GLTF  | `<model-viewer>` | mesh (cells, flowers, organs, …)                                                                                                                                                               |
-| PDB / mmCIF | 3Dmol.js         | atomic-resolution protein / nucleic-acid structures                                                                                                                                            |
-| SDF / MOL   | 3Dmol.js         | small-molecule connection tables — preserves bond orders and stereo; unlocks docking poses, conformer sets (GEOM), and SBDD outputs natively. Do **not** convert SDF→PDB (drops bonds/stereo). |
+A side feature, not part of the organism benchmark. The viewer is keyed by format:
 
-Point-cloud, voxel, and Gaussian-splat formats are planned (see `docs/audits/`).
+| Format      | Viewer           | Notes                                                                    |
+| ----------- | ---------------- | ------------------------------------------------------------------------ |
+| GLB / GLTF  | `<model-viewer>` | meshes; the organism outputs                                             |
+| PDB / mmCIF | 3Dmol.js         | atomic-resolution protein / nucleic-acid structures                      |
+| SDF / MOL   | 3Dmol.js         | small-molecule connection tables; keeps bond orders and stereochemistry  |
 
-## Loading benchmark content
-
-`app/data/benchmarks/` ships with a small set of real, openly-licensed reference
-structures that are registered automatically on first `seed_all` call. The bundled
-manifest (`manifest.json`) currently includes:
-
-- **Crambin (1CRN)** — a 46-residue protein fold from RCSB PDB (CC0).
-- **Heme (HEM)** — a real small-molecule SDF ligand from the RCSB Chemical
-  Component Dictionary (CC0).
-
-To add more benchmark assets:
-
-1. Drop the asset file under `app/data/benchmarks/assets/`.
-2. Append an entry to `app/data/benchmarks/manifest.json` with the fields:
-
-```json
-{
-  "task_slug": "unique-slug",
-  "category": "proteins",
-  "title": "Human-readable task name",
-  "prompt": "What should be generated here?",
-  "generator_slug": "source-name",
-  "generator_name": "Source Name (display)",
-  "file": "assets/filename.pdb",
-  "format": "pdb",
-  "source": "https://doi.org/...",
-  "license": "CC0",
-  "attribution": "RCSB PDB (1XYZ)"
-}
-```
-
-3. Re-seed: `python -m app.seed` (idempotent; new entries are deduplicated by
-   content hash so re-running is safe).
-
-For larger fetch-from-upstream workflows, see `scripts/fetch_benchmarks.py`
-(downloads and formats remote assets to the manifest schema).
+`app/benchmarks.py` registers curated, openly-licensed assets listed in
+`app/data/benchmarks/manifest.json` on `python -m app.seed` (content-hash deduplicated, so
+re-running is safe). The manifest is empty: the protein and small-molecule examples it used to
+carry were removed on 2026-06-21 when the project narrowed to organisms. The required fields are
+in `REQUIRED_FIELDS` in `app/benchmarks.py`. No further formats are planned.
 
 ## Ingesting real generator outputs
 
@@ -322,6 +312,7 @@ Python client (`app/client.py`) + runnable example (`scripts/ingest_example.py`)
 
 ```python
 from app.client import Taxon3DClient
+
 c = Taxon3DClient("http://localhost:8000", admin_token="...")
 c.upsert_category("flowers", "Flowers")
 task = c.create_task("flowers", "Rose bloom", "Generate an open rose.")
@@ -345,6 +336,9 @@ gene/parameter vector or prompt.
 - `GET /api/significance?criterion=&category=` — pairwise P(A ranks above B)
   matrix + per-rank "beats next?" significance (paired bootstrap). Page: `/significance`.
 - `GET /api/bias` — position/format bias audit + gold pass-rate + low-trust count.
+- The two endpoints above and the `/significance` page exist only on an internal instance
+  (`BIO3D_INTERNAL_PAGES`, on by default when a scorer URL is configured). The public deploy at
+  taxon3d.org returns 404 for them.
 - `POST /api/vote` is rate-limited, deduplicated, and trust-scored; ~`GOLD_RATE`
   of comparisons are gold attention checks. Tunables: `BIO3D_VOTE_RATE_LIMIT`,
   `BIO3D_VOTE_RATE_WINDOW`, `BIO3D_GOLD_RATE`, `BIO3D_TRUST_THRESHOLD`,
@@ -361,30 +355,11 @@ category}) scope.
 3. ✅ Elo + leaderboard
 4. ✅ Admin tools (CRUD + GLB upload + recompute)
 5. ✅ Bradley–Terry + bootstrap CIs
-6. ✅ Research-grade evaluation: multi-criterion + per-category voting,
+6. ✅ Multi-criterion evaluation: per-criterion and per-category voting,
    per-(criterion × category) leaderboard slices, tie-aware ranking, dataset export.
 
-**Staged plan to a real tool** (research/internal first → public arena):
-
-- ✅ **Real-generator ingestion API** — `POST /api/outputs` (token-gated, validated,
-  deduped) + a Python client so generator pipelines (e.g. flower-sim,
-  Blender/GeoNodes rose, plant world model) register GLBs directly; bake
-  gene/params → GLB. See "Ingesting real generator outputs" above.
-- ✅ **Molecular-format viewers** — format-keyed viewer registry: `<model-viewer>`
-  for GLB/GLTF meshes, **3Dmol.js** for PDB/mmCIF structures. Ingestion validates
-  molecular files (atom records) and the seed ships a PDB demo task. (Point clouds
-  - Mol\* are future registry entries.)
-- ✅ **Statistical rigor**: paired-bootstrap pairwise significance ("is A
-  meaningfully above B?") + position/format bias audit (`/significance`,
-  `/api/significance`, `/api/bias`). (Full Rao–Kupper tie model still future.)
-- ✅ **Vote integrity / anti-abuse**: gold-standard attention checks + trust
-  scoring, trust-gated Bradley–Terry, rate limiting, per-session dedup, captcha
-  seam, and a `/methodology` transparency page.
-- ✅ **Scale-out seams**: storage abstraction (local + S3/CDN), Postgres-ready
-  pooled engine, Redis-backed distributed rate limiting — all config-switched
-  (see "Production scale-out"). Implemented + unit-tested for selection/URL logic.
-- ⬜ **Remaining for full production**: live load-test against real Postgres/S3/
-  Redis; model-author submission + moderation queue; horizontal-deploy guide.
+No further development is planned. Since 2026-09-24 the project is in maintenance mode, with a
+review on 2027-03-24; see [docs/SUNSET.md](docs/SUNSET.md).
 
 ## Notes
 

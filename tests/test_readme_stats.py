@@ -18,7 +18,8 @@ def test_readme_quotes_the_snapshot():
     snap = json.loads((ROOT / "docs" / "stats" / "readme.json").read_text())
     readme = (ROOT / "README.md").read_text()
     assert (
-        f"{snap['outputs_votable']} votable 3D models across {snap['entrants']} entrants" in readme
+        f"{snap['outputs_votable']} visible outputs from {snap['entrants']} generators "
+        f"(prod snapshot, {snap['measured']})" in readme
     )
     assert f"{snap['tasks_active']} active" in readme
     assert "measured" in snap and snap["measured"] >= "2026-09-06"
