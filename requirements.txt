@@ -6,9 +6,9 @@
 #
 # The split is enforced by tests/test_runtime_deps.py, which boots the real ASGI app in a
 # subprocess and fails if serving a public route pulls in the research stack.
-fastapi==0.141.1
-uvicorn[standard]==0.53.0
-SQLAlchemy==2.0.54
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
+SQLAlchemy==2.1.3
 Jinja2==3.1.6
 python-multipart==0.0.32
 pydantic==2.13.5
@@ -16,7 +16,7 @@ pillow==12.3.0  # loaded at app import; also downscales reference photos for the
 # Request-reachable via POST /api/submit -> app.submissions -> app.ingest (trimesh, lazily) ->
 # app.structural (numpy). A community submission is validated in-process, so these are runtime.
 numpy==2.5.3
-trimesh==5.1.0
+trimesh==5.1.1
 # Imported at module top level by app/recon_client.py, app/image3d.py and app/client.py. Until
 # 2026-09-04 it was pinned only in requirements-dev.txt, so the Docker image (runtime + scale)
 # lacked it; tests/test_runtime_deps.py now scans app/*.py for exactly this class of gap.

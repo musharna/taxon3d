@@ -7,5 +7,5 @@
 #   BIO3D_REDIS_URL=redis://...                    -> needs redis
 
 psycopg[binary]==3.3.6
-boto3==1.43.98
+boto3==1.43.108
 redis==8.1.0
