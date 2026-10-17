@@ -9,7 +9,7 @@ Usage: python scripts/mobile_audit.py <out_dir_tag>   (e.g. "before" / "after")
 
 import sys
 import pathlib
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeout, sync_playwright
 
 BASE = "http://127.0.0.1:8099"
 TAG = sys.argv[1] if len(sys.argv) > 1 else "before"
@@ -17,6 +17,16 @@ OUT = pathlib.Path("/tmp/mobile-audit") / TAG  # nosec B108 - dev-only screensho
 OUT.mkdir(parents=True, exist_ok=True)
 
 VIEWPORTS = [("390x844", 390, 844), ("430x932", 430, 932)]
+
+# The page is measurable once arena.js has run (it marks <body> js-ab, and on a first visit opens
+# the in-flow onboarding <details>) and every viewer slot it mounted has settled: viewer.js drops
+# the "Loading model…" spinner when the mesh loads and clears the slot when it fails, so a slot
+# with no spinner is final either way. Ballot layout depends on both.
+SETTLED = """() => {
+  if (!document.body.classList.contains('js-ab')) return false;
+  const mounted = [...document.querySelectorAll('.viewer-slot')].filter((s) => s._viewerGen);
+  return mounted.length > 0 && mounted.every((s) => !s.querySelector('.viewer-loading'));
+}"""
 
 # Measure in-page: overflow, control geometry, what's actually visible.
 PROBE = """() => {
@@ -154,25 +164,15 @@ with sync_playwright() as p:
             )
             page = ctx.new_page()
             page.goto(url, wait_until="networkidle")
-            page.wait_for_timeout(2500)
-            # First-run onboarding card covers the page; a voter taps "Start voting" once.
-            # Measurements below are the landing state, before any scrolling.
-            #
-            # The JS-click fallback is not cosmetic: on the K-wise page Playwright's
-            # click() can hang in "scrolling into view if needed" even though the button is
-            # visible and IS the topmost element at its own center (elementFromPoint returns
-            # it — a real finger lands on it). Without the fallback the card stays up and
-            # every geometry number below is silently measured through a 397px overlay.
             try:
-                page.click("#onboard-start", timeout=3000)
-            except Exception:
-                print("    (onboard click timed out — Playwright quirk; dispatching via JS)")
-                page.evaluate("document.getElementById('onboard-start')?.click()")
-            page.wait_for_timeout(1000)
-            page.evaluate("window.scrollTo(0, 0)")
-            page.wait_for_timeout(300)
-            if page.evaluate("!document.getElementById('onboard-banner').hasAttribute('hidden')"):
-                print("    !! onboarding card STILL UP — geometry below is not the voter's view")
+                page.wait_for_function(SETTLED, timeout=30000)
+            except PlaywrightTimeout:
+                print("    !! viewers still loading after 30s — geometry below is not settled")
+            # Measurements below are a first-time voter's landing state, before any scrolling.
+            # Onboarding is an in-flow <details> that arena.js opens on a first visit (fresh
+            # context here), not an overlay, so it is part of that state and is not dismissed.
+            if not page.evaluate("document.getElementById('onboard-banner')?.open === true"):
+                print("    !! onboarding not open — this is not a first visit's layout")
             d = page.evaluate(PROBE)
             show(f"{mode} @ {name}", d)
             page.screenshot(path=str(OUT / f"{mode}-{name}.png"), full_page=False)
@@ -182,7 +182,8 @@ with sync_playwright() as p:
             if mode == "pairwise":
                 try:
                     page.click('.vote-btn[data-winner="a"]', timeout=4000)
-                    page.wait_for_timeout(1800)
+                    # The reveal un-hides Next-pair once the vote response lands.
+                    page.wait_for_selector("#next-pair-btn", state="visible", timeout=10000)
                     d2 = page.evaluate(PROBE)
                     print("  --- after vote ---")
                     print(f"    next-pair btn: pos={d2['nextPairPosition']} {d2['nextPairBtn']}")

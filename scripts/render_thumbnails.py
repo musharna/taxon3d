@@ -22,6 +22,7 @@ from app.database import SessionLocal  # noqa: E402
 from app.models import Critique, ModelOutput  # noqa: E402
 from app.storage import get_storage  # noqa: E402
 from app.thumbnails import store_thumbnail, thumbnail_rel_path  # noqa: E402
+from scripts.judge_capture import MV_SETTLED  # noqa: E402
 
 INJECT = """
 async (asset) => {
@@ -99,7 +100,11 @@ def main() -> int:
             for o in todo:
                 try:
                     loaded = pg.evaluate(INJECT, o.asset_path)
-                    pg.wait_for_timeout(900)
+                    if loaded:
+                        # Wait out model-viewer's post-load progress bar (see MV_SETTLED);
+                        # the fixed 900 ms this replaces was shorter than it, so every
+                        # thumbnail carried the bar's band across its top edge.
+                        pg.wait_for_function(MV_SETTLED, arg="#thumb", timeout=10000)
                     png = pg.locator("#thumb").screenshot()
                     if not loaded:
                         print(f"  warn  id={o.id} model not loaded (captured anyway)")

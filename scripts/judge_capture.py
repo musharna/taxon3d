@@ -13,6 +13,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import config  # noqa: E402
 
+# `loaded` is not the settled frame. model-viewer 3.5.0 keeps its default progress bar painted
+# across the top 5 px for 1.3 s after load (`.bar.hide { transition: opacity 0.3s 1s }`), so a
+# screenshot before then carries a dark band. Measured on three corpus GLBs (0.35-29 MB): that
+# band is the only pixel change after `loaded`. Throws, rather than passing, if the bar is gone
+# from a future model-viewer, so this wait gets rechecked instead of silently doing nothing.
+MV_SETTLED = """sel => {
+  const mv = document.querySelector(sel);
+  if (!mv || !mv.loaded) return false;
+  const bar = mv.shadowRoot && mv.shadowRoot.querySelector('#default-progress-bar > .bar');
+  if (!bar) throw new Error('model-viewer progress bar not found: recheck MV_SETTLED');
+  return getComputedStyle(bar).opacity === '0';
+}"""
+TWO_FRAMES = "() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))"
+
 
 def browser_capture_multi_factory():
     """Returns capture_multi(glb_abs, azimuths, elev) -> list[png bytes]."""
@@ -77,15 +91,17 @@ def browser_capture_multi_factory():
         try:
             page.goto(f"http://127.0.0.1:{port}/_render.html")
             page.wait_for_function("document.querySelector('#mv')?.loaded === true", timeout=120000)
+            page.wait_for_function(MV_SETTLED, arg="#mv", timeout=10000)
             pngs: list[bytes] = []
             for az in azimuths:
-                # Snap (not animate) the camera to this azimuth, then let one frame render.
+                # Snap (not animate) the camera to this azimuth, then wait two frames so the
+                # render loop has drawn the new view before the screenshot.
                 page.eval_on_selector(
                     "#mv",
                     "(mv, o) => { mv.cameraOrbit = o; mv.jumpCameraToGoal(); }",
                     f"{az}deg {elev}deg auto",
                 )
-                page.wait_for_timeout(200)
+                page.evaluate(TWO_FRAMES)
                 pngs.append(page.locator("#mv").screenshot())
         finally:
             page.close()

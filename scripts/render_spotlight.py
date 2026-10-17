@@ -16,6 +16,7 @@ from sqlalchemy import select  # noqa: E402
 
 from app import config  # noqa: E402
 from app.models import Critique, ModelOutput  # noqa: E402
+from scripts.judge_capture import MV_SETTLED  # noqa: E402
 
 
 def _get_or_create_critique(db, output_id: int) -> Critique:
@@ -129,6 +130,7 @@ def _browser_capture_factory():
         page = browser.new_page(viewport={"width": 512, "height": 512})
         page.goto(f"http://127.0.0.1:{port}/_render.html")
         page.wait_for_function("document.querySelector('#mv')?.loaded === true", timeout=30000)
+        page.wait_for_function(MV_SETTLED, arg="#mv", timeout=10000)  # past the progress bar
         png = page.locator("#mv").screenshot()
         page.close()
         return png

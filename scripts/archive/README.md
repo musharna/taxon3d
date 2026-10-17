@@ -6,8 +6,6 @@ wired into a pipeline; import paths are `scripts.archive.<name>`.
 
 | script | superseded by |
 |---|---|
-| `verify_mobile_ux.py` | `tests/test_mobile_arena.py`, `tests/test_mobile_nav.py` (P0 mobile changes shipped) |
-| `verify_onboarding.py` | `tests/test_onboarding.py`, `tests/test_onboarding_in_flow.py` |
 | `verify_synced_rotation.py` | `tests/test_synced_rotation.py` |
 | `verify_viewer_controls.py` | `tests/test_viewer_controls.py` |
 | `source_reference_sidecars.py` | one-shot EXIF provenance-hint scrape over the old MVP gallery; licensing is now backfilled per source by `scripts/backfill_licenses.py` |
@@ -20,6 +18,11 @@ wired into a pipeline; import paths are `scripts.archive.<name>`.
 | `calibration_report.py` | `app.calibration` report helpers (`tests/test_calibration_report.py`); report already written to `docs/results/` |
 | `analyze_trait_calibration.py` | SP4 analysis complete; results in `docs/results/` |
 | `infinigen_flower_realize.py` | `scripts/generate_infinigen.py` (`tests/test_generate_infinigen.py`) |
+
+Deleted 2026-10-17: `verify_mobile_ux.py` (superseded by `tests/test_mobile_arena.py`,
+`tests/test_mobile_nav.py`) and `verify_onboarding.py` (superseded by `tests/test_onboarding.py`,
+`tests/test_onboarding_in_flow.py`). Both drove onboarding markup that no longer exists through
+fixed sleeps, which the `no-fixed-wait-py` hook refuses; the last copies are at d5d3d25.
 
 Kept in `scripts/` despite being on the retirement list, because something still references
 them: `reorient_scans.py` (the only walker over `app/reorient.py`, now behind `app.dbguard`),
