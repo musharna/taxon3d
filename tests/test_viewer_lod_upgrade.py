@@ -132,7 +132,7 @@ def _run(url: str, *, zoom: bool):
             page.mouse.move(box["x"], box["y"])
             for _ in range(6):  # several notches: one may fall under the zoom threshold
                 page.mouse.wheel(0, -240)
-                page.wait_for_timeout(150)
+                page.wait_for_timeout(150)  # qa-wait-ok: notch pacing; state wait below
             try:
                 page.wait_for_function(
                     "() => performance.getEntriesByType('resource').some(e => e.name.endsWith('/full.glb'))",
