@@ -20,6 +20,15 @@ design spec (internal).
   over the derived `DB_PATH`), and a test asserts nothing under the checkout's
   `data/assets` is written during a seed run, with the isolated dir receiving
   the GLBs as its positive control.
+- **`test_an_admin_can_still_fetch_a_hidden_output` never sent a wrong cookie on
+  its own.** It called `cookies.set` on the logged-in client, which adds a
+  second `bio3d_admin` cookie beside the login one, so the request carried both
+  and the server read whichever came last. `httpx2` 2.16.0 (2026-10-21,
+  unpinned, installed by `anthropic`) reversed that order and the test failed
+  with no commit here: the nightly was red for 24 nights and three Dependabot
+  PRs could not go green. The app was right throughout. The wrong cookie now
+  goes on a client of its own and the test asserts the `Cookie` header it
+  sent.
 
 ## [0.2.0] - 2026-09-06
 
