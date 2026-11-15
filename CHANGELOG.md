@@ -28,7 +28,7 @@ design spec (internal).
   with no commit here: the nightly was red for 24 nights and three Dependabot
   PRs could not go green. The app was right throughout. The wrong cookie now
   goes on a client of its own and the test asserts the `Cookie` header it
-  sent; `httpx2` is pinned in `requirements-dev.txt`.
+  sent.
 
 ## [0.2.0] - 2026-09-06
 
