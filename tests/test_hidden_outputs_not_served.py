@@ -96,9 +96,15 @@ def test_an_admin_can_still_fetch_a_hidden_output(visible_output, monkeypatch):
     c = TestClient(app)
     login_admin(c, ADMIN_TOKEN)
     assert c.get(f"/media/o/{oid}.glb").status_code == 200
-    # A wrong cookie is not a bypass either.
-    c.cookies.set("bio3d_admin", "wrong")
-    assert c.get(f"/media/o/{oid}.glb").status_code == 404
+    # A wrong cookie is not a bypass either. It goes on a client of its own, so the request
+    # carries the wrong value and nothing else: `cookies.set` on the logged-in client does not
+    # replace the login cookie, it adds a second one of the same name, and which of the two the
+    # server reads is the order the client library happens to send them in.
+    wrong = TestClient(app)
+    wrong.cookies.set("bio3d_admin", "wrong")
+    r = wrong.get(f"/media/o/{oid}.glb")
+    assert r.request.headers["cookie"] == "bio3d_admin=wrong"
+    assert r.status_code == 404
 
 
 def test_the_lod_route_hides_too(visible_output):
