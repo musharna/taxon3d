@@ -34,7 +34,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12" # pyproject: requires-python >=3.12
-          cache: pip
+          # No `cache: pip` in this workflow: see the test job.
       - name: Install lint tooling only
         # Not requirements-dev.txt: that layers on requirements-research.txt, which pulls
         # torch and the NVIDIA CUDA stack (multiple GB) for a job that only runs ruff.
@@ -52,11 +52,19 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            requirements-research.txt
-            requirements-dev.txt
+          # No `cache: pip`. It saved pip's download cache, 2.9 GB of torch and CUDA wheels,
+          # under a key that hashes the requirements files, so every change to one saved the
+          # whole 2.9 GB again: once for the pull request and once for master. A repo's
+          # Actions caches share 10 GB and the least recently used entry goes first. One
+          # requirements PR was enough (old master copy + PR copy + new master copy + the
+          # 1.5 GB model below), and the entry that went was the nightly's mutation results
+          # (0.3 MB, read once a day): the nightly of 2026-11-16 found none of the results
+          # saved the day before and checked every mutant from scratch. Measured on this job: 19-28 s restore +
+          # ~70 s install with the cache, 108 s and 380 s install without (download speed
+          # varies). setup-python also falls back to the newest entry with the same prefix,
+          # so lint and deploy-guards could restore this job's 2.9 GB and save it again
+          # under their own key; none of the three caches now.
+          # tests/test_ci_cache_budget.py fails if a job turns it back on.
       - name: Install
         # requirements-dev layers research on runtime, and the suite genuinely needs it —
         # tests/test_volume_convert.py imports app.volume_convert (tifffile, nibabel). A
@@ -120,7 +128,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
+          # No `cache: pip` in this workflow: see the test job.
       - run: pip install -r requirements.txt
       - name: A public deploy must refuse to boot without an admin token
         env:
