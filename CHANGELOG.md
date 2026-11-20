@@ -29,6 +29,13 @@ design spec (internal).
   PRs could not go green. The app was right throughout. The wrong cookie now
   goes on a client of its own and the test asserts the `Cookie` header it
   sent.
+- **CI's pip cache evicted the nightly's mutation results.** `ci.yml` saved
+  pip's download cache (2.9 GB of torch and CUDA wheels) again on every
+  requirements change, for the pull request and for master. That passed the
+  10 GB a repo's Actions caches share, and the entry GitHub dropped was the
+  0.3 MB of mutation results, so the nightly of 2026-11-16 checked every mutant
+  from scratch. No job caches pip downloads now (the install takes 20 s to
+  5 min longer, by download speed), and a test fails if one turns it back on.
 
 ## [0.2.0] - 2026-09-06
 
