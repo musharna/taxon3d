@@ -10,8 +10,8 @@
 # scipy and tifffile set the project's Python floor (3.12).
 scikit-image==0.26.0
 scipy==1.18.1
-nibabel==5.4.2
-tifffile==2026.9.15
+nibabel==5.5.0
+tifffile==2026.11.12
 
 # Quadric decimation backend for app.mesh_convert.to_glb(max_faces=...) — dense laser scans.
 # trimesh calls it implicitly; mesh_convert is script/test-only, so this is offline.
